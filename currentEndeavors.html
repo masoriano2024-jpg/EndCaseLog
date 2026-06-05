@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Survivor Case Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+  :root{
+    --navy:#1a3a5c;
+    --navy-deep:#0f2440;
+    --blue:#0077c8;
+    --blue-bright:#0090e8;
+    --blue-light:#7bb8e8;
+    --blue-pale:#d6eaf8;
+    --blue-bg:#f0f7fd;
+    --ink:#1a2a3a;
+    --gray:#4a5a6a;
+    --gray-light:#8aa0b0;
+    --line:#ccdde8;
+    --white:#ffffff;
+    --surface:#f5f9fc;
+    --green:#1a7a4a;
+    --green-soft:#d4f0e0;
+    --red:#c0392b;
+    --red-soft:#fde8e6;
+    --amber:#d4860a;
+    --amber-soft:#fef3d8;
+    --shadow:0 2px 12px rgba(0,80,160,.10);
+    --shadow-card:0 1px 4px rgba(0,60,120,.08), 0 4px 16px rgba(0,60,120,.07);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Open Sans',system-ui,sans-serif;
+    background:var(--blue-bg);
+    background-image:linear-gradient(160deg,#f0f7fd 0%,#e8f2fa 100%);
+    color:var(--ink);
+    min-height:100vh;
+    line-height:1.55;
+    padding:0 0 80px;
+  }
+  header.top{
+    background:linear-gradient(135deg,#3a3a3a 0%,#4f4f4f 60%,#5a5a5a 100%);
+    padding:0 32px;
+    display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:0;
+    border-bottom:4px solid var(--blue);
+    min-height:72px;
+  }
+  .brand{display:flex;align-items:center;gap:18px;padding:14px 0}
+  .brand h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:var(--white);letter-spacing:.5px;text-transform:uppercase}
+  .brand h1 span{color:#7bb8e8}
+  .brand .sub{font-size:11px;color:#b0c8d8;font-weight:500;letter-spacing:.8px;text-transform:uppercase;margin-top:2px}
+  .today{font-size:12px;text-align:right;color:#b0c8d8;padding:14px 0;font-weight:500;letter-spacing:.3px}
+  .today b{display:block;font-family:'Montserrat',sans-serif;font-size:16px;color:var(--white);font-weight:700;margin-top:2px}
+
+  nav.tabs{display:flex;gap:0;background:var(--navy);padding:0 28px;border-bottom:1px solid rgba(255,255,255,.08)}
+  nav.tabs button{
+    font-family:'Montserrat',sans-serif;font-size:12px;font-weight:600;
+    background:none;border:none;border-bottom:3px solid transparent;
+    padding:14px 18px;cursor:pointer;color:rgba(255,255,255,.5);
+    letter-spacing:.6px;text-transform:uppercase;transition:color .15s,border-color .15s;
+  }
+  nav.tabs button.active{color:var(--white);border-bottom-color:var(--blue)}
+  nav.tabs button:hover{color:rgba(255,255,255,.85)}
+
+  main{max-width:1040px;margin:0 auto;padding:28px 24px}
+  .panel{display:none}
+  .panel.show{display:block;animation:fade .3s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+  h2.sec{font-family:'Montserrat',sans-serif;font-weight:700;font-size:20px;margin-bottom:4px;color:var(--navy);letter-spacing:.2px}
+  .sec-note{color:var(--gray);font-size:13px;margin-bottom:20px}
+
+  .btn{
+    font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;
+    border:none;background:var(--navy);color:var(--white);
+    padding:9px 18px;border-radius:6px;cursor:pointer;letter-spacing:.5px;text-transform:uppercase;
+    transition:background .15s,transform .08s,box-shadow .15s;box-shadow:0 2px 6px rgba(0,60,120,.2);
+  }
+  .btn:hover{background:var(--navy-deep);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,60,120,.25)}
+  .btn:active{transform:translateY(0)}
+  .btn.ghost{background:transparent;color:var(--navy);border:2px solid var(--line);box-shadow:none}
+  .btn.ghost:hover{background:var(--blue-pale);border-color:var(--blue-light)}
+  .btn.gold{background:var(--blue);border-color:var(--blue)}
+  .btn.gold:hover{background:var(--blue-bright)}
+  .btn.green{background:var(--green);border-color:var(--green)}
+  .btn.green:hover{background:#155f39}
+  .btn.red{background:var(--red);border-color:var(--red)}
+  .btn.red:hover{background:#a93226}
+  .btn.sm{padding:5px 11px;font-size:11px}
+  .btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+
+  .start-row{display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
+  .start-row .big{font-size:13px;padding:12px 24px}
+  .alert-bar{
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-deep) 100%);
+    color:var(--white);padding:14px 20px;border-radius:8px;
+    margin-bottom:22px;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+    box-shadow:var(--shadow);
+  }
+  .alert-bar .count{background:var(--blue);padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700}
+
+  .case-card{
+    background:var(--white);border:1px solid var(--line);border-left:5px solid var(--line);
+    border-radius:8px;padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow-card);
+    transition:box-shadow .15s;
+  }
+  .case-card:hover{box-shadow:0 4px 20px rgba(0,80,160,.13)}
+  .case-card.due{border-left-color:var(--red)}
+  .case-card.soon{border-left-color:var(--amber)}
+  .case-card.ok{border-left-color:var(--green)}
+  .case-card.intake{border-left-color:var(--blue)}
+  .case-card.open{border-left-color:var(--green);background:#f8fffe}
+  .case-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .case-id{font-family:'Montserrat',sans-serif;font-weight:700;font-size:17px;color:var(--navy)}
+  .case-id .tag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:8px;letter-spacing:.5px;text-transform:uppercase;vertical-align:middle}
+  .tag.outreach{background:var(--amber-soft);color:var(--amber)}
+  .tag.intake{background:var(--blue-pale);color:var(--blue)}
+  .tag.open{background:var(--green-soft);color:var(--green)}
+  .tag.closed{background:#e8edf2;color:var(--gray)}
+  .tag.declined{background:var(--red-soft);color:var(--red)}
+  .case-step{font-size:14px;margin-top:5px;color:var(--gray)}
+  .case-step b{font-family:'Montserrat',sans-serif;font-weight:600;color:var(--ink)}
+  .due-chip{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.3px;font-family:'Montserrat',sans-serif}
+  .due-chip.red{background:var(--red-soft);color:var(--red)}
+  .due-chip.amber{background:var(--amber-soft);color:var(--amber)}
+  .due-chip.green{background:var(--green-soft);color:var(--green)}
+  .case-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
+  .progress{height:4px;background:var(--blue-pale);border-radius:4px;margin-top:12px;overflow:hidden}
+  .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--blue) 0%,var(--blue-bright) 100%);border-radius:4px;transition:width .3s}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--gray-light);font-size:15px}
+
+  .log-fab{
+    position:fixed;right:24px;bottom:24px;z-index:40;
+    background:linear-gradient(135deg,var(--blue) 0%,var(--blue-bright) 100%);
+    color:#fff;border:none;border-radius:50px;
+    padding:14px 24px;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;
+    cursor:pointer;box-shadow:0 6px 24px rgba(0,120,200,.45);letter-spacing:.5px;text-transform:uppercase;
+    transition:transform .15s,box-shadow .15s;
+  }
+  .log-fab:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,120,200,.5)}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(15,36,64,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex;animation:fade .2s}
+  .modal{background:var(--white);border-radius:12px;padding:28px;max-width:460px;width:100%;box-shadow:0 24px 80px rgba(0,40,100,.35)}
+  .modal h3{font-family:'Montserrat',sans-serif;font-size:20px;margin-bottom:16px;font-weight:700;color:var(--navy)}
+  label{display:block;font-size:11px;font-weight:700;color:var(--gray);margin:12px 0 5px;letter-spacing:.6px;text-transform:uppercase}
+  input,select,textarea{
+    width:100%;font-family:'Open Sans',sans-serif;font-size:14px;
+    padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);
+    transition:border-color .15s;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);background:#fff}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+  .radio-row{display:flex;gap:8px;margin-top:6px}
+  .radio-row label{flex:1;margin:0;text-align:center;padding:9px;border:1.5px solid var(--line);border-radius:6px;cursor:pointer;background:var(--surface);font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:13px}
+  .radio-row input{display:none}
+  .radio-row input:checked + span{font-weight:700;color:var(--blue)}
+  .radio-row label:has(input:checked){border-color:var(--blue);background:var(--blue-pale)}
+
+  table{border-collapse:collapse;width:100%;font-size:13px;background:var(--white);box-shadow:var(--shadow-card);border-radius:8px;overflow:hidden}
+  th,td{border:1px solid var(--line);padding:9px 10px;text-align:center}
+  th{background:var(--navy);color:var(--white);font-family:'Montserrat',sans-serif;font-weight:600;font-size:11px;letter-spacing:.5px;text-transform:uppercase;line-height:1.3}
+  td.wk{font-weight:600;background:var(--blue-pale);color:var(--navy)}
+  td input{padding:4px 6px;text-align:center;border:1px solid transparent;background:transparent;font-size:13px}
+  td input:hover{border-color:var(--line)}
+  td input:focus{border-color:var(--blue);background:#fff}
+  .tbl-actions{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}
+
+  .log-list{margin-top:10px;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+  .log-item{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line);font-size:14px}
+  .log-item:last-child{border:none}
+  .log-item .method{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--blue);font-weight:700;font-family:'Montserrat',sans-serif}
+
+  details.path{margin-bottom:10px;border:1px solid var(--line);border-radius:8px;background:var(--white);box-shadow:var(--shadow-card)}
+  details.path summary{font-family:'Montserrat',sans-serif;font-weight:700;padding:13px 16px;cursor:pointer;font-size:14px;color:var(--navy);letter-spacing:.2px}
+  details.path ol{padding:4px 16px 14px 40px;font-size:14px;color:var(--gray)}
+  details.path li{margin:5px 0}
+  details.path li.cur{color:var(--blue);font-weight:700}
+
+  .roster-line{display:flex;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--line);font-size:14px;align-items:center}
+  .roster-line:last-child{border:none}
+  .mini{font-size:12px;color:var(--gray-light)}
+  @media(max-width:640px){header.top{padding:16px}main{padding:20px 14px}}
+
+  /* SELF-AUDIT TAB */
+  .audit-lookup{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:24px}
+  .audit-lookup input{font-family:'Open Sans',sans-serif;font-size:14px;border:1.5px solid var(--line);padding:9px 12px;border-radius:6px;background:var(--white);color:var(--ink);width:160px}
+  .audit-lookup input:focus{outline:none;border-color:var(--blue)}
+  .audit-no-case{text-align:center;padding:60px 20px;color:var(--gray-light);font-size:15px}
+  .audit-header-bar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-deep) 100%);
+    color:var(--white);padding:18px 22px;margin-bottom:20px;
+    border-radius:10px;box-shadow:var(--shadow);
+  }
+  .audit-case-id{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:700;color:var(--white)}
+  .audit-case-id .mini{color:var(--blue-light)}
+  .audit-pct{font-family:'Montserrat',sans-serif;font-size:36px;font-weight:800;color:var(--white)}
+  .audit-progress{width:100%;height:6px;background:rgba(255,255,255,.2);border-radius:4px;margin-top:10px;overflow:hidden}
+  .audit-progress-fill{height:100%;background:linear-gradient(90deg,var(--blue-light) 0%,var(--blue-bright) 100%);transition:width .4s ease}
+  .audit-section{margin-bottom:14px;border:1px solid var(--line);border-radius:8px;background:var(--white);box-shadow:var(--shadow-card);overflow:hidden}
+  .audit-sec-head{
+    background:var(--navy);color:var(--white);padding:11px 16px;
+    display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;
+  }
+  .audit-sec-head h3{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+  .audit-badge{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:rgba(255,255,255,.15);color:var(--white)}
+  .audit-badge.complete{background:var(--green);color:#fff}
+  .audit-badge.partial{background:var(--amber);color:#fff}
+  .audit-sec-body{}
+  .audit-section.acollapsed .audit-sec-body{display:none}
+  .audit-sublabel{
+    font-family:'Montserrat',sans-serif;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+    color:var(--blue);padding:10px 16px 3px;border-top:1px solid var(--line);background:var(--blue-bg);
+  }
+  .audit-sublabel:first-child{border-top:none}
+  .acheck-item{
+    display:flex;align-items:flex-start;gap:11px;padding:9px 16px;
+    border-top:1px solid #edf3f8;cursor:pointer;transition:background .1s;
+  }
+  .acheck-item:hover{background:var(--blue-bg)}
+  .acheck-item.achecked{background:#f0faf5}
+  .acheck-item input[type="checkbox"]{
+    appearance:none;-webkit-appearance:none;
+    width:17px;height:17px;min-width:17px;
+    border:2px solid var(--line);background:var(--white);cursor:pointer;
+    position:relative;top:2px;border-radius:3px;transition:background .1s,border-color .1s;
+  }
+  .acheck-item input[type="checkbox"]:checked{background:var(--blue);border-color:var(--blue)}
+  .acheck-item input[type="checkbox"]:checked::after{content:'\2713';position:absolute;top:-1px;left:1px;color:#fff;font-size:12px;font-weight:bold}
+  .acheck-item label{font-size:13.5px;line-height:1.45;cursor:pointer;flex:1;color:var(--ink)}
+  .acheck-item.achecked label{color:var(--green)}
+  .anote{font-size:11px;color:var(--gray-light);display:block;margin-top:1px}
+  .audit-actions-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:20px 0 8px}
+  .save-flash{color:var(--green);font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;font-family:'Montserrat',sans-serif}
+  .save-flash.show{opacity:1}
+  .audit-history{margin-top:24px;padding-top:18px;border-top:2px solid var(--line)}
+  .audit-history h4{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;margin-bottom:12px;color:var(--navy);text-transform:uppercase;letter-spacing:.4px}
+  .ah-row{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:10px 14px;border:1px solid var(--line);background:var(--white);margin-bottom:6px;cursor:pointer;
+    border-radius:6px;transition:background .1s,box-shadow .1s;
+  }
+  .ah-row:hover{background:var(--blue-bg);box-shadow:var(--shadow-card)}
+  .ah-date{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:600;color:var(--navy)}
+  .ah-score{font-size:12px;color:var(--blue);font-weight:600}
+  .ah-load{margin-left:auto;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;border:1.5px solid var(--line);padding:4px 12px;cursor:pointer;background:transparent;border-radius:5px;text-transform:uppercase;letter-spacing:.4px;transition:background .1s}
+  .ah-load:hover{background:var(--navy);color:var(--white);border-color:var(--navy)}
+  .ah-del{font-size:11px;color:var(--red);background:none;border:none;font-family:'Montserrat',sans-serif;font-weight:700;cursor:pointer;padding:4px 8px;text-transform:uppercase;letter-spacing:.3px}
+  .ah-del:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div style="display:flex;flex-direction:column;gap:4px;margin-right:4px">
+      <div style="height:4px;width:26px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
+      <div style="height:6px;width:26px;background:#0090e8;border-radius:1px"></div>
+      <div style="height:4px;width:26px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
+    </div>
+    <div>
+      <h1>END<span>≡</span>AVORS <span style="font-size:14px;opacity:.7;font-weight:600">DCM</span></h1>
+      <div class="sub">Disaster Case Management · Survivor Workflow</div>
+    </div>
+  </div>
+  <div class="today">
+    <span>Today</span>
+    <b id="todayDate">—</b>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="active" data-tab="dash">Dashboard</button>
+  <button data-tab="roster">Roster</button>
+  <button data-tab="weekly">Weekly Report</button>
+  <button data-tab="steps">The Steps</button>
+  <button data-tab="audit">Self-Audit</button>
+  <button data-tab="datatools">💾 Data</button>
+</nav>
+
+<main>
+  <!-- DASHBOARD -->
+  <section class="panel show" id="dash">
+    <div class="start-row">
+      <button class="btn gold big" onclick="openStart()">＋ Start New Case</button>
+      <span class="mini">Assign a survivor and begin the timeline.</span>
+    </div>
+    <div class="alert-bar">
+      <span>📋 Daily Reminder — here's what's due today</span>
+      <span class="count" id="dueCount">0 due</span>
+    </div>
+    <div id="caseList"></div>
+  </section>
+
+  <!-- ROSTER -->
+  <section class="panel" id="roster">
+    <h2 class="sec">Roster</h2>
+    <p class="sec-note">Every survivor by ID. Names stay with you — store them here or on paper, your call.</p>
+    <div id="rosterList" style="background:#fbf8f0;border:1px solid var(--line);border-radius:3px;box-shadow:var(--shadow)"></div>
+  </section>
+
+  <!-- WEEKLY -->
+  <section class="panel" id="weekly">
+    <h2 class="sec">Weekly Report</h2>
+    <p class="sec-note">Auto-fills contact counts &amp; case totals from your logs. Edit any cell, then export to Excel.</p>
+    <div class="tbl-actions">
+      <button class="btn green" onclick="exportCSV()">⬇ Export to Excel (.csv)</button>
+      <button class="btn ghost" onclick="addWeekRow()">＋ Add Week Row</button>
+      <button class="btn ghost sm" onclick="recalcWeekly()">↻ Recalculate from logs</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="weekTable"></table>
+    </div>
+    <p class="mini" style="margin-top:10px">Blue numbers in your sample = auto-calculated. You can type over anything.</p>
+  </section>
+
+  <!-- STEPS REFERENCE -->
+  <section class="panel" id="steps">
+    <h2 class="sec">The Two Paths</h2>
+    <p class="sec-note">Reference for the full sequence. Your active cases follow these automatically.</p>
+    <div id="stepsRef"></div>
+  </section>
+
+  <!-- SELF-AUDIT -->
+  <section class="panel" id="audit">
+    <h2 class="sec">Self-Audit Checklist</h2>
+    <p class="sec-note">DCM · Texas Community Resource · Endeavors — load a client ID to review compliance.</p>
+    <div class="audit-lookup">
+      <input type="text" id="auditClientInput" placeholder="Client ID" maxlength="20"
+        onkeydown="if(event.key==='Enter')auditLoad()">
+      <button class="btn gold" onclick="auditLoad()">Load Client</button>
+      <button class="btn ghost" id="auditNewBtn" onclick="auditNew()" style="display:none">＋ New Audit</button>
+      <button class="btn ghost" onclick="window.print()">🖨 Print</button>
+    </div>
+    <div id="auditApp"><div class="audit-no-case">Enter a Client ID above to load the compliance checklist.</div></div>
+  </section>
+
+  <!-- DATA TOOLS -->
+  <section class="panel" id="datatools">
+    <h2 class="sec">Data Backup &amp; Restore</h2>
+    <p class="sec-note">Export a full backup of all your cases, contact logs, and roster to a file you save on your computer or cloud drive. Import it anytime to restore everything — on this machine or a new one.</p>
+
+    <div style="display:grid;gap:20px;max-width:560px;margin-top:8px">
+
+      <!-- EXPORT CARD -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:var(--shadow-card)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px">⬇ Export Full Backup</div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:16px;line-height:1.6">Downloads a <code style="background:var(--blue-pale);padding:1px 5px;border-radius:3px">.json</code> file with every case, every contact log, your roster, and your weekly report data. Save it to Google Drive, a USB drive, or your desktop. This is your safety net.</p>
+        <button class="btn green" onclick="exportBackup()">⬇ Download Backup Now</button>
+        <div id="exportMsg" style="margin-top:10px;font-size:12px;color:var(--green);font-weight:600;display:none"></div>
+      </div>
+
+      <!-- IMPORT CARD -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:var(--shadow-card)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px">⬆ Restore from Backup</div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:4px;line-height:1.6">Select a backup file you exported previously. <strong style="color:var(--red)">This will replace all current data.</strong> Only use this after a machine wipe or when starting fresh on a new device.</p>
+        <p style="font-size:12px;color:var(--gray-light);margin-bottom:16px">Audit data is stored separately per client and will be restored automatically.</p>
+        <label for="importFile" style="display:inline-block;cursor:pointer">
+          <span class="btn gold" style="display:inline-block">⬆ Choose Backup File</span>
+          <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
+        </label>
+        <div id="importMsg" style="margin-top:10px;font-size:12px;font-weight:600;display:none"></div>
+      </div>
+
+      <!-- STATUS CARD -->
+      <div style="background:var(--blue-bg);border:1px solid var(--line);border-radius:10px;padding:20px;box-shadow:var(--shadow-card)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Current Data Summary</div>
+        <div id="dataSummary" style="font-size:13px;color:var(--gray);line-height:2"></div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<button class="log-fab" onclick="openLog()">📞 Log a Contact</button>
+
+<!-- START MODAL -->
+<div class="modal-bg" id="startModal">
+  <div class="modal">
+    <h3>Start New Case</h3>
+    <label>Survivor ID (number)</label>
+    <input type="number" id="newId" placeholder="e.g. 1042">
+    <label>Name / note (optional — kept private to you)</label>
+    <input type="text" id="newName" placeholder="optional reference">
+    <label>Date assigned</label>
+    <input type="date" id="newDate">
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('startModal')">Cancel</button>
+      <button class="btn gold" onclick="startCase()">Begin Timeline</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOG CONTACT MODAL -->
+<div class="modal-bg" id="logModal">
+  <div class="modal">
+    <h3>Log Contact Attempt</h3>
+    <label>Survivor ID</label>
+    <input type="number" id="logId" placeholder="ID number">
+    <label>Method</label>
+    <div class="radio-row">
+      <label><input type="radio" name="method" value="Call" checked><span>📞 Call</span></label>
+      <label><input type="radio" name="method" value="Text"><span>💬 Text</span></label>
+      <label><input type="radio" name="method" value="Email"><span>✉ Email</span></label>
+    </div>
+    <label>Date</label>
+    <input type="date" id="logDate">
+    <label>Result (optional)</label>
+    <select id="logResult">
+      <option value="No answer">No answer / no contact</option>
+      <option value="Made contact">Made contact</option>
+      <option value="Left message">Left message / voicemail</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('logModal')">Cancel</button>
+      <button class="btn gold" onclick="saveLog()">Log It</button>
+    </div>
+  </div>
+</div>
+
+<!-- DECISION MODAL -->
+<div class="modal-bg" id="decideModal">
+  <div class="modal">
+    <h3 id="decideTitle">Survivor Responded</h3>
+    <p style="font-size:15px;margin-bottom:6px">What happened with this contact?</p>
+    <div class="modal-actions" style="flex-direction:column">
+      <button class="btn green" style="width:100%" onclick="decide('accept')">✓ Accepted services → start Intake</button>
+      <button class="btn red" style="width:100%;margin-top:8px" onclick="decide('decline')">✗ Declined services → close in TCR</button>
+      <button class="btn ghost" style="width:100%;margin-top:8px" onclick="closeModal('decideModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- DATA MODEL ---------- */
+const OUTREACH = [
+  {t:"Survivor is assigned", offset:{type:"start"}},
+  {t:"Phone call within 24 hours", offset:{type:"cal",n:1}},
+  {t:"48 hrs: call again + mail recruitment letter", offset:{type:"cal",n:2}},
+  {t:"Calendar Day 1 — phone call attempt", offset:{type:"cal",n:3}},
+  {t:"Calendar Day 2 — phone call attempt", offset:{type:"cal",n:4}},
+  {t:"Calendar Day 3 — phone call attempt", offset:{type:"cal",n:5}},
+  {t:"Calendar Day 4 — phone call attempt", offset:{type:"cal",n:6}},
+  {t:"Calendar Day 5 — phone call attempt + send 1st CLOSURE letter", offset:{type:"cal",n:7}},
+  {t:"Business Day 1 — contact attempt", offset:{type:"bus",n:1}},
+  {t:"Business Day 2 — contact attempt", offset:{type:"bus",n:2}},
+  {t:"Business Day 3 — contact attempt", offset:{type:"bus",n:3}},
+  {t:"Business Day 4 — contact attempt", offset:{type:"bus",n:4}},
+  {t:"Business Day 5 — contact attempt", offset:{type:"bus",n:5}},
+  {t:"Business Day 6 — contact attempt", offset:{type:"bus",n:6}},
+  {t:"Business Day 7 — contact attempt + send FINAL closure letter", offset:{type:"bus",n:7}}
+];
+const INTAKE = [
+  {t:"Phone Triage form"},
+  {t:"Eligibility form + review needed documentation"},
+  {t:"Set up intake appointment (if repairs → schedule CCA)"},
+  {t:"Input in Outlook calendar"},
+  {t:"Intake appt: verify docs, sign in BLUE ink, discuss recovery plan draft"},
+  {t:"Input all documents in TCR"},
+  {t:"Recovery plan signed by supervisor"}
+];
+
+let cases = [];
+let logs = [];
+let weekly = [];
+let roster = {}; // id -> name
+
+/* ---------- STORAGE ---------- */
+async function save(){
+  try{
+    await window.storage.set('cases', JSON.stringify(cases));
+    await window.storage.set('logs', JSON.stringify(logs));
+    await window.storage.set('weekly', JSON.stringify(weekly));
+    await window.storage.set('roster', JSON.stringify(roster));
+  }catch(e){console.error('save failed',e)}
+}
+async function load(){
+  for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['weekly',v=>weekly=v],['roster',v=>roster=v]]){
+    try{ const r=await window.storage.get(k); if(r&&r.value) setter(JSON.parse(r.value)); }catch(e){}
+  }
+}
+
+/* ---------- DATE HELPERS ---------- */
+function todayISO(){return new Date().toISOString().slice(0,10)}
+function fmt(iso){if(!iso)return'—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+function addCal(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function addBus(iso,n){let d=new Date(iso+'T00:00:00');let added=0;while(added<n){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)added++;}return d.toISOString().slice(0,10)}
+function dueDateFor(c,stepIdx){
+  const o=OUTREACH[stepIdx].offset;
+  if(o.type==='start')return c.assigned;
+  if(o.type==='cal')return addCal(c.assigned,o.n);
+  if(o.type==='bus'){
+    // business days counted from the day after the calendar-day window ends (cal day 5 = +7)
+    return addBus(addCal(c.assigned,7),o.n);
+  }
+}
+function daysUntil(iso){const a=new Date(todayISO()+'T00:00:00'),b=new Date(iso+'T00:00:00');return Math.round((b-a)/86400000)}
+
+/* ---------- RENDER DASHBOARD ---------- */
+function renderDash(){
+  const list=document.getElementById('caseList');
+  const active=cases.filter(c=>c.status==='outreach'||c.status==='intake'||c.status==='open');
+  let due=0;
+  if(active.length===0){
+    list.innerHTML='<div class="empty">No active cases. Press <b>Start New Case</b> when a survivor is assigned.<br><span class="mini">"For everything there is a season." — Ecclesiastes 3:1</span></div>';
+    document.getElementById('dueCount').textContent='0 due';
+    return;
+  }
+  // sort: outreach by urgency first, then intake, then open
+  const rank={outreach:0,intake:1,open:2};
+  active.sort((a,b)=>{
+    if(a.status!==b.status)return rank[a.status]-rank[b.status];
+    if(a.status==='outreach'){
+      return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
+    }
+    return 0;
+  });
+  list.innerHTML=active.map(c=>{
+    if(c.status==='open'){
+      return `<div class="case-card open">
+        <div class="case-head">
+          <div><span class="case-id">#${c.id}<span class="tag open">Open Case</span></span>
+            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+          <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
+        </div>
+        <div class="case-step">Intake complete. Survivor is an active open case.</div>
+        <div class="case-actions">
+          <button class="btn sm ghost" onclick="reopenIntake(${c.id})" title="Move back to intake">← Back to Intake</button>
+          <span style="flex:1"></span>
+          <button class="btn sm green" onclick="closeOpenCase(${c.id})">Close Case ✓</button>
+          <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+        </div>
+      </div>`;
+    }
+    if(c.status==='intake'){
+      const total=INTAKE.length;
+      const lastStep=c.step===total-1;
+      return `<div class="case-card intake">
+        <div class="case-head">
+          <div><span class="case-id">#${c.id}<span class="tag intake">Intake</span></span>
+            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+          <span class="due-chip green">In progress</span>
+        </div>
+        <div class="case-step">Step ${c.step+1} of ${total}: <b>${INTAKE[c.step].t}</b></div>
+        <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+        <div class="case-actions">
+          <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
+          <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
+          ${!lastStep?`<button class="btn sm green" onclick="markOpen(${c.id})" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
+          <span style="flex:1"></span>
+          <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+        </div>
+      </div>`;
+    }
+    // outreach
+    const dd=dueDateFor(c,c.step);
+    const du=daysUntil(dd);
+    let cls='ok',chip='green',chiptxt='Due '+fmt(dd);
+    if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;due++;}
+    else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';due++;}
+    else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';due++;}
+    else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
+    const total=OUTREACH.length;
+    return `<div class="case-card ${cls}">
+      <div class="case-head">
+        <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
+          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <span class="due-chip ${chip}">${chiptxt}</span>
+      </div>
+      <div class="case-step">Step ${c.step+1} of ${total}: <b>${OUTREACH[c.step].t}</b></div>
+      <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+      <div class="case-actions">
+        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
+        <button class="btn sm gold" onclick="nextStep(${c.id})" ${c.step===total-1?'disabled':''}>Next Step →</button>
+        <button class="btn sm green" onclick="openDecide(${c.id})">Made Contact…</button>
+        <span style="flex:1"></span>
+        <button class="btn sm red" onclick="closeCase(${c.id},'closed')">Close (no contact)</button>
+        <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('dueCount').textContent=due+' due';
+}
+function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+
+/* ---------- CASE ACTIONS ---------- */
+function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';document.getElementById('newName').value='';show('startModal')}
+function startCase(){
+  const id=parseInt(document.getElementById('newId').value);
+  if(!id){alert('Enter a numerical ID.');return;}
+  if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'))){alert('That ID already has an active case.');return;}
+  const name=document.getElementById('newName').value.trim();
+  if(name)roster[id]=name;
+  cases.push({id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()});
+  closeModal('startModal');save();renderAll();
+}
+function nextStep(id){
+  const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
+  const arr=c.status==='outreach'?OUTREACH:INTAKE;
+  if(c.step<arr.length-1){c.step++;}
+  else if(c.status==='intake'){c.status='open';c.openedAt=todayISO();}
+  save();renderAll();
+}
+function markOpen(id){
+  const c=cases.find(c=>c.id===id&&c.status==='intake');if(!c)return;
+  if(!confirm('Skip remaining intake steps and mark as Open Case?'))return;
+  c.status='open';c.openedAt=todayISO();save();renderAll();
+}
+function closeOpenCase(id){
+  const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
+  if(!confirm('Close this open case as resolved?'))return;
+  c.status='completed';c.closed=todayISO();save();renderAll();
+}
+function reopenIntake(id){
+  const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
+  c.status='intake';c.step=INTAKE.length-1;save();renderAll();
+}
+function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;save();renderAll();}}
+function closeCase(id,status){
+  const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
+  if(!confirm(status==='declined'?'Close case as DECLINED in TCR?':'Close this case (no contact made)?'))return;
+  c.status=status;c.closed=todayISO();save();renderAll();
+}
+function deleteClient(id){
+  if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), and the name. This cannot be undone.`))return;
+  cases=cases.filter(c=>c.id!==id);
+  logs=logs.filter(l=>l.id!==id);
+  delete roster[id];
+  save();renderAll();
+}
+let decideId=null;
+function openDecide(id){decideId=id;show('decideModal')}
+function decide(kind){
+  const c=cases.find(c=>c.id===decideId);if(!c){closeModal('decideModal');return;}
+  if(kind==='accept'){c.status='intake';c.step=0;c.intakeStart=todayISO();}
+  else{c.status='declined';c.closed=todayISO();}
+  closeModal('decideModal');save();renderAll();
+}
+
+/* ---------- LOG CONTACT ---------- */
+function openLog(){document.getElementById('logDate').value=todayISO();document.getElementById('logId').value='';show('logModal')}
+function saveLog(){
+  const id=parseInt(document.getElementById('logId').value);
+  if(!id){alert('Enter the survivor ID.');return;}
+  const method=document.querySelector('input[name=method]:checked').value;
+  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),result:document.getElementById('logResult').value});
+  closeModal('logModal');save();renderAll();
+}
+
+/* ---------- ROSTER ---------- */
+function renderRoster(){
+  const el=document.getElementById('rosterList');
+  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number)])].sort((a,b)=>a-b);
+  if(ids.length===0){el.innerHTML='<div class="empty">No survivors yet.</div>';return;}
+  el.innerHTML=ids.map(id=>{
+    const c=cases.find(c=>c.id===id);
+    const st=c?c.status:'—';
+    const cnt=logs.filter(l=>l.id===id).length;
+    return `<div class="roster-line">
+      <div><b>#${id}</b> <input style="width:auto;display:inline-block;border:1px solid transparent;background:transparent" value="${esc(roster[id]||'')}" placeholder="add name…" onchange="setName(${id},this.value)"></div>
+      <div class="mini">status: <b>${st}</b> · ${cnt} contact log${cnt!==1?'s':''} <button class="btn sm ghost" style="margin-left:8px" onclick="deleteClient(${id})" title="Delete entirely">🗑 Delete</button></div>
+    </div>`;
+  }).join('');
+}
+function setName(id,v){if(v.trim())roster[id]=v.trim();else delete roster[id];save();}
+
+/* ---------- WEEKLY REPORT ---------- */
+const WK_COLS=['Week Ending','Total Client Contacts','Total Survivor Contacts (Pipeline)','Cases in Progress (Pending Eligibility)','Expected Active Cases (Next Reporting Period)','Closure Letters Sent','Open Cases Closed','Current Open Cases','Current Caseload'];
+function weekEndingFor(iso){
+  const d=new Date(iso+'T00:00:00');
+  const day=d.getDay(); // 0=Sun ... 3=Wed
+  const diff=(3-day+7)%7; // days forward to next Wednesday (0 if already Wed)
+  d.setDate(d.getDate()+diff);
+  return d.toISOString().slice(0,10);
+}
+function recalcWeekly(){
+  // build counts per week-ending (Wednesday) from logs
+  const byWeek={};
+  logs.forEach(l=>{const w=weekEndingFor(l.date);byWeek[w]=byWeek[w]||{contacts:0};byWeek[w].contacts++;});
+  const weeks=Object.keys(byWeek).sort();
+  weeks.forEach(w=>{
+    let row=weekly.find(r=>r[0]===w);
+    if(!row){row=[w,'','','','','','','',''];weekly.push(row);}
+    row[2]=byWeek[w].contacts;                                                    // Total Survivor Contacts (Pipeline)
+    row[3]=cases.filter(c=>c.status==='intake').length;                           // Cases in Progress (Pending Eligibility)
+    row[7]=cases.filter(c=>c.status==='open').length;                             // Current Open Cases (post-intake)
+    row[8]=cases.filter(c=>['outreach','intake','open'].includes(c.status)).length; // Current Caseload (all active)
+  });
+  weekly.sort((a,b)=>a[0]<b[0]?-1:1);
+  save();renderWeekly();
+}
+function renderWeekly(){
+  const t=document.getElementById('weekTable');
+  let h='<tr>'+WK_COLS.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+  weekly.forEach((row,ri)=>{
+    h+='<tr>'+row.map((v,ci)=>ci===0
+      ?`<td class="wk"><input type="date" value="${v}" onchange="editWk(${ri},${ci},this.value)" style="width:120px"></td>`
+      :`<td><input value="${v}" onchange="editWk(${ri},${ci},this.value)"></td>`).join('')+'</tr>';
+  });
+  t.innerHTML=h;
+}
+function editWk(r,c,v){weekly[r][c]=v;save();}
+function addWeekRow(){weekly.push([weekEndingFor(todayISO()),'','','','','','','','']);save();renderWeekly();}
+function exportCSV(){
+  let csv=WK_COLS.join(',')+'\n';
+  weekly.forEach(r=>{csv+=r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')+'\n';});
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='weekly_report_'+todayISO()+'.csv';a.click();
+}
+
+/* ---------- STEPS REFERENCE ---------- */
+function renderSteps(){
+  const el=document.getElementById('stepsRef');
+  el.innerHTML=`
+    <details class="path" open><summary>Path A · No Contact (15 steps)</summary>
+      <ol>${OUTREACH.map(s=>`<li>${s.t}</li>`).join('')}</ol>
+      <p class="mini" style="padding:0 16px 12px">If contact is made &amp; they decline → close in TCR. If they accept → Intake (Path B).</p>
+    </details>
+    <details class="path"><summary>Path B · Intake (after acceptance, 7 steps)</summary>
+      <ol>${INTAKE.map(s=>`<li>${s.t}</li>`).join('')}</ol>
+    </details>`;
+}
+
+/* ---------- TABS / MODALS ---------- */
+function show(id){document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('show'));
+  b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('show');
+  if(b.dataset.tab==='datatools')renderDataSummary();
+});
+document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show')});
+
+function renderAll(){renderDash();renderRoster();renderWeekly();}
+
+/* ═══════════════════════════════════
+   SELF-AUDIT MODULE
+═══════════════════════════════════ */
+const AUDIT_CHECKLIST = [
+  {id:'intake',label:'Intake',items:[
+    {id:'i1',text:'Primary Client Info'},
+    {id:'i2',text:'Initial Intake Info'},
+    {id:'i3',text:'Household Composition'},
+    {id:'i4',text:'Contact Information'},
+    {id:'i5',text:'Release of Confidential Information Form (ROI)',note:'must be current'},
+    {id:'i6',text:'FEMA Release of Information (ROI)'},
+    {id:'i7',text:'Rights and Responsibilities Agreement',note:'must be current'},
+  ]},
+  {id:'household',label:'Household Members',items:[
+    {id:'hh1',text:'All Household Members listed (including client)'},
+  ]},
+  {id:'assessment',label:'Assessment',subsections:[
+    {label:'Impacts & Vulnerabilities',items:[
+      {id:'a1',text:'Language and Literacy'},
+      {id:'a2',text:'Risk Assessment'},
+      {id:'a3',text:'Household Impacts'},
+    ]},
+    {label:'Housing',items:[
+      {id:'a4',text:'Pre-Disaster Information / Living Information',note:'residence during disaster'},
+      {id:'a5',text:'Post-Disaster Information / Living Information',note:'current residence'},
+      {id:'a6',text:'Damage Assessment'},
+      {id:'a7',text:'Income and Expenses',note:'refer to Income vs. Expenses form'},
+    ]},
+    {label:'Federal & Other Assistance',items:[
+      {id:'a8',text:'FEMA Individual Assistance'},
+      {id:'a9',text:'LTRG',note:'if applicable'},
+      {id:'a10',text:'CDBG',note:'if applicable'},
+      {id:'a11',text:'Insurance'},
+      {id:'a12',text:'Disaster Loans'},
+      {id:'a13',text:'Personal Loans'},
+    ]},
+  ]},
+  {id:'dcmp',label:'DCMP Details',items:[
+    {id:'d1',text:'Case Notes in Compliance',note:'weekly contact'},
+    {id:'d2',text:'DCMP Details'},
+    {id:'d3',text:'Date DCMP Release Signed (ROCI)'},
+    {id:'d4',text:'Date of DCMP Intake'},
+  ]},
+  {id:'recovery',label:'Recovery Planning',items:[
+    {id:'r1',text:'Date Recovery Plan Created'},
+    {id:'r2',text:'Recovery Goals Entered',note:'one per each unmet need'},
+    {id:'r3',text:'Status up to date'},
+    {id:'r4',text:'Deadlines up to date'},
+  ]},
+  {id:'referrals',label:'Referrals',items:[
+    {id:'ref1',text:'One Referral per each Recovery Goal entered',note:'minimum'},
+    {id:'ref2',text:'Referral Date Entered'},
+    {id:'ref3',text:'Provided Date Entered'},
+    {id:'ref4',text:'Notes Entered referencing status update'},
+  ]},
+  {id:'followup',label:'Follow Up Manager',items:[
+    {id:'f1',text:'Next Follow-up Date entered'},
+    {id:'f2',text:'Follow Up History',note:'reflecting weekly contact'},
+  ]},
+  {id:'closure',label:'Case Closure',items:[
+    {id:'cl1',text:'Client Satisfaction'},
+    {id:'cl2',text:'Housing'},
+    {id:'cl3',text:'Employment'},
+    {id:'cl4',text:'Closure'},
+    {id:'cl5',text:'Date Case Closed'},
+    {id:'cl6',text:'Reason for Case Closure correct?',note:'use TCR guide'},
+  ]},
+  {id:'doc',label:'Documentation',subsections:[
+    {label:'Section 1 · Initial Information',items:[
+      {id:'doc1',text:'Intake Form'},
+      {id:'doc2',text:'Phone Triage / Eligibility Form'},
+    ]},
+    {label:'Section 2 · Service Documentation',items:[
+      {id:'doc3',text:'Case Notes / Progress Notes Documentation',note:'SharePoint case notes uploaded in PDF format'},
+    ]},
+    {label:'Section 3 · Referrals, Planning and Closure',items:[
+      {id:'doc4',text:'Individual Recovery Plan Form (signed copy)',note:'Must be completed within 30 days'},
+      {id:'doc5',text:'Client Financial Assistance Documentation'},
+      {id:'doc6',text:'FEMA Letter / Correspondence'},
+      {id:'doc7',text:'SBA Application / Correspondence'},
+      {id:'doc8',text:'Financial Assistance'},
+      {id:'doc9',text:'Other Agency Correspondence'},
+      {id:'doc10',text:'Long Term Recovery Documentation (application/decision)'},
+      {id:'doc11',text:'Qualitative Closure Summary Form'},
+      {id:'doc12',text:'Case Closure Information (Closure form uploaded)'},
+    ]},
+    {label:'Section 4 · CCA Reports and Housing',items:[
+      {id:'doc13',text:'Insurance Documents (Flood / Homeowners / Renters)'},
+      {id:'doc14',text:'Insurance Declarations Page / Insurance Policy'},
+      {id:'doc15',text:'Claim Settlement Documentation'},
+      {id:'doc16',text:'CCA Photowaiver / Media Release Form'},
+      {id:'doc17',text:'Pictures of Damaged Residence (photos of residence)'},
+      {id:'doc18',text:'Who took the pictures?'},
+    ]},
+    {label:'Section 5 · Other Correspondence',items:[
+      {id:'doc19',text:'Duplication of Benefits Form (DOB)'},
+      {id:'doc20',text:'FEMA Letter / Correspondence'},
+      {id:'doc21',text:'Other Agency Correspondence'},
+      {id:'doc22',text:'Confidential Documents',note:'if applicable'},
+    ]},
+    {label:'Section 6 · Collateral Information and Identification',items:[
+      {id:'doc23',text:'Proof of Identification'},
+      {id:'doc24',text:'Copy of Driver\'s License / Passport'},
+      {id:'doc25',text:'Proof of Home Ownership / Rental Agreement (Entire Document)'},
+      {id:'doc26',text:'Property Deed AND Property Appraiser Page AND Property Tax Page'},
+      {id:'doc27',text:'Mobile Home Title / Registration & Lot Lease',note:'if applicable'},
+      {id:'doc28',text:'Rental Lease (August 2023) AND Utility Bill (through July 16, 2025)'},
+      {id:'doc29',text:'Proof of Income (for every member over age 18)'},
+      {id:'doc30',text:'Income vs. Expense Form'},
+      {id:'doc31',text:'Court Orders',note:'if applicable'},
+      {id:'doc32',text:'Code of Conduct (Rights and Responsibilities Form)'},
+    ]},
+  ]},
+];
+
+let auditClientId = null;
+let auditChecked = {};
+let auditSavedIndex = null;
+
+function auditAllIds(section){
+  let ids=[];
+  if(section.items) ids=ids.concat(section.items.map(i=>i.id));
+  if(section.subsections) section.subsections.forEach(s=>s.items.forEach(i=>ids.push(i.id)));
+  return ids;
+}
+function auditTotal(){return AUDIT_CHECKLIST.reduce((a,s)=>a+auditAllIds(s).length,0);}
+function auditDone(checked){return Object.values(checked).filter(Boolean).length;}
+function auditStorageKey(id){return 'auditlist_'+id;}
+function auditLoadList(id){try{return JSON.parse(localStorage.getItem(auditStorageKey(id)))||[];}catch{return[];}}
+function auditSaveList(id,list){localStorage.setItem(auditStorageKey(id),JSON.stringify(list));}
+
+function auditLoad(){
+  const raw=document.getElementById('auditClientInput').value.trim();
+  if(!raw){alert('Enter a Client ID first.');return;}
+  auditClientId=raw;
+  auditSavedIndex=null;
+  auditChecked={};
+  document.getElementById('auditNewBtn').style.display='inline-block';
+  auditRender();
+}
+function auditNew(){
+  auditSavedIndex=null;
+  auditChecked={};
+  auditRender();
+  document.getElementById('auditApp').scrollIntoView({behavior:'smooth'});
+}
+
+function auditRender(){
+  const app=document.getElementById('auditApp');
+  const total=auditTotal();
+  const done=auditDone(auditChecked);
+  const pct=total?Math.round((done/total)*100):0;
+  const pctColor=pct===100?'var(--green)':pct>60?'var(--amber)':'var(--red)';
+
+  let html=`<div class="audit-header-bar">
+    <div>
+      <div class="audit-case-id">Client #${esc(auditClientId)}</div>
+      <div class="mini">${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="audit-pct" style="color:${pctColor}">${pct}%</div>
+      <div class="mini">${done} of ${total} complete</div>
+    </div>
+    <div class="audit-progress" style="width:100%"><div class="audit-progress-fill" style="width:${pct}%"></div></div>
+  </div>`;
+
+  AUDIT_CHECKLIST.forEach(section=>{
+    const sIds=auditAllIds(section);
+    const sDone=sIds.filter(id=>auditChecked[id]).length;
+    const sTotal=sIds.length;
+    const badge=sDone===sTotal?'complete':sDone>0?'partial':'';
+    html+=`<div class="audit-section" id="asec_${section.id}">
+      <div class="audit-sec-head" onclick="auditToggleSec('${section.id}')">
+        <h3>${section.label}</h3>
+        <span class="audit-badge ${badge}">${sDone}/${sTotal}</span>
+      </div>
+      <div class="audit-sec-body">`;
+    if(section.items) section.items.forEach(item=>{html+=auditCheckHtml(item);});
+    if(section.subsections) section.subsections.forEach(sub=>{
+      html+=`<div class="audit-sublabel">${sub.label}</div>`;
+      sub.items.forEach(item=>{html+=auditCheckHtml(item);});
+    });
+    html+=`</div></div>`;
+  });
+
+  html+=`<div class="audit-actions-row">
+    <button class="btn gold" onclick="auditSave()">💾 Save Audit</button>
+    <button class="btn ghost" onclick="auditClearAll()">Clear All</button>
+    <button class="btn ghost" onclick="auditCheckAll()">Check All</button>
+    <span class="save-flash" id="auditSaveFlash">Saved ✓</span>
+  </div>`;
+
+  const list=auditLoadList(auditClientId);
+  if(list.length>0){
+    html+=`<div class="audit-history"><h4>Audit History — Client #${esc(auditClientId)}</h4>`;
+    list.forEach((entry,idx)=>{
+      const op=entry.total?Math.round((entry.done/entry.total)*100):0;
+      const cur=idx===auditSavedIndex?' · <span style="color:var(--gold);font-style:italic">viewing</span>':'';
+      html+=`<div class="ah-row" onclick="auditLoadEntry(${idx})">
+        <span class="ah-date">${entry.date}</span>
+        <span class="ah-score">${entry.done}/${entry.total} (${op}%)</span>
+        <span class="mini">${cur}</span>
+        <button class="ah-load" onclick="event.stopPropagation();auditLoadEntry(${idx})">Load</button>
+        <button class="ah-del" onclick="event.stopPropagation();auditDeleteEntry(${idx})">Delete</button>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  app.innerHTML=html;
+}
+
+function auditCheckHtml(item){
+  const checked=!!auditChecked[item.id];
+  return `<div class="acheck-item ${checked?'achecked':''}" onclick="auditToggle('${item.id}')">
+    <input type="checkbox" id="achk_${item.id}" ${checked?'checked':''}
+      onclick="event.stopPropagation();auditToggle('${item.id}')">
+    <label for="achk_${item.id}">${esc(item.text)}${item.note?`<span class="anote">${item.note}</span>`:''}</label>
+  </div>`;
+}
+function auditToggle(id){auditChecked[id]=!auditChecked[id];auditRender();}
+function auditToggleSec(id){const el=document.getElementById('asec_'+id);if(el)el.classList.toggle('acollapsed');}
+function auditClearAll(){if(!confirm('Clear all checkmarks?'))return;auditChecked={};auditRender();}
+function auditCheckAll(){AUDIT_CHECKLIST.forEach(s=>auditAllIds(s).forEach(id=>auditChecked[id]=true));auditRender();}
+function auditSave(){
+  const list=auditLoadList(auditClientId);
+  const total=auditTotal();
+  const done=auditDone(auditChecked);
+  const entry={
+    date:new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),
+    checked:{...auditChecked},done,total
+  };
+  if(auditSavedIndex!==null&&list[auditSavedIndex]){list[auditSavedIndex]=entry;}
+  else{list.push(entry);auditSavedIndex=list.length-1;}
+  auditSaveList(auditClientId,list);
+  auditRender();
+  const fl=document.getElementById('auditSaveFlash');
+  if(fl){fl.classList.add('show');setTimeout(()=>fl.classList.remove('show'),2000);}
+}
+function auditLoadEntry(idx){
+  const list=auditLoadList(auditClientId);
+  if(!list[idx])return;
+  auditChecked={...list[idx].checked};
+  auditSavedIndex=idx;
+  auditRender();
+}
+function auditDeleteEntry(idx){
+  if(!confirm('Delete this audit entry? Cannot be undone.'))return;
+  const list=auditLoadList(auditClientId);
+  list.splice(idx,1);
+  auditSaveList(auditClientId,list);
+  if(auditSavedIndex===idx){auditSavedIndex=null;auditChecked={};}
+  auditRender();
+}
+
+/* ---------- DATA BACKUP / RESTORE ---------- */
+function renderDataSummary(){
+  const el=document.getElementById('dataSummary');
+  if(!el)return;
+  const activeCases=cases.filter(c=>['outreach','intake','open'].includes(c.status)).length;
+  const closedCases=cases.filter(c=>!['outreach','intake','open'].includes(c.status)).length;
+  const rosterCount=Object.keys(roster).length;
+  // count audit entries across all clients
+  let auditCount=0;
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('auditlist_')){
+      try{const list=JSON.parse(localStorage.getItem(k));auditCount+=list.length;}catch{}
+    }
+  }
+  el.innerHTML=`
+    <div>📋 <b>${activeCases}</b> active case${activeCases!==1?'s':''} &nbsp;·&nbsp; <b>${closedCases}</b> closed</div>
+    <div>📞 <b>${logs.length}</b> contact log${logs.length!==1?'s':''}</div>
+    <div>👤 <b>${rosterCount}</b> roster name${rosterCount!==1?'s':''}</div>
+    <div>✅ <b>${auditCount}</b> saved audit entr${auditCount!==1?'ies':'y'}</div>
+    <div>📅 <b>${weekly.length}</b> weekly report row${weekly.length!==1?'s':''}</div>
+  `;
+}
+
+async function exportBackup(){
+  // gather all audit data from localStorage
+  const auditData={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('auditlist_')){
+      try{auditData[k]=JSON.parse(localStorage.getItem(k));}catch{}
+    }
+  }
+  const backup={
+    version:1,
+    exportedAt:new Date().toISOString(),
+    cases,logs,weekly,roster,auditData
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='case-tracker-backup-'+todayISO()+'.json';
+  a.click();
+  const msg=document.getElementById('exportMsg');
+  if(msg){
+    msg.textContent='✓ Backup downloaded — '+cases.length+' case(s), '+logs.length+' log(s) saved.';
+    msg.style.display='block';
+    setTimeout(()=>{msg.style.display='none';},4000);
+  }
+}
+
+async function importBackup(input){
+  const file=input.files[0];
+  if(!file)return;
+  const msg=document.getElementById('importMsg');
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const backup=JSON.parse(e.target.result);
+      if(!backup.version||!backup.cases){
+        throw new Error('This does not look like a valid backup file.');
+      }
+      const confirmMsg=`Restore backup from ${new Date(backup.exportedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}?\n\n`+
+        `This will replace your current data with:\n`+
+        `• ${backup.cases.length} case(s)\n`+
+        `• ${backup.logs.length} contact log(s)\n`+
+        `• ${Object.keys(backup.roster||{}).length} roster name(s)\n\n`+
+        `Current data will be overwritten. Continue?`;
+      if(!confirm(confirmMsg)){input.value='';return;}
+
+      // restore main data
+      cases=backup.cases||[];
+      logs=backup.logs||[];
+      weekly=backup.weekly||[];
+      roster=backup.roster||{};
+      await save();
+
+      // restore audit data to localStorage
+      if(backup.auditData){
+        Object.entries(backup.auditData).forEach(([k,v])=>{
+          localStorage.setItem(k,JSON.stringify(v));
+        });
+      }
+
+      renderAll();
+      renderDataSummary();
+      if(msg){
+        msg.style.color='var(--green)';
+        msg.textContent='✓ Restore complete — '+cases.length+' case(s) and '+logs.length+' log(s) loaded.';
+        msg.style.display='block';
+      }
+    }catch(err){
+      if(msg){
+        msg.style.color='var(--red)';
+        msg.textContent='✗ Error: '+err.message;
+        msg.style.display='block';
+      }
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- INIT ---------- */
+(async function(){
+  document.getElementById('todayDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  await load();
+  renderSteps();
+  renderAll();
+})();
+</script>
+</body>
+</html>
