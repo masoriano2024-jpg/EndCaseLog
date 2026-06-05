@@ -472,17 +472,17 @@ let weekly = [];
 let roster = {}; // id -> name
 
 /* ---------- STORAGE ---------- */
-async function save(){
+function save(){
   try{
-    await window.storage.set('cases', JSON.stringify(cases));
-    await window.storage.set('logs', JSON.stringify(logs));
-    await window.storage.set('weekly', JSON.stringify(weekly));
-    await window.storage.set('roster', JSON.stringify(roster));
+    localStorage.setItem('cases', JSON.stringify(cases));
+    localStorage.setItem('logs', JSON.stringify(logs));
+    localStorage.setItem('weekly', JSON.stringify(weekly));
+    localStorage.setItem('roster', JSON.stringify(roster));
   }catch(e){console.error('save failed',e)}
 }
-async function load(){
+function load(){
   for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['weekly',v=>weekly=v],['roster',v=>roster=v]]){
-    try{ const r=await window.storage.get(k); if(r&&r.value) setter(JSON.parse(r.value)); }catch(e){}
+    try{ const raw=localStorage.getItem(k); if(raw) setter(JSON.parse(raw)); }catch(e){}
   }
 }
 
@@ -1070,7 +1070,7 @@ async function importBackup(input){
       logs=backup.logs||[];
       weekly=backup.weekly||[];
       roster=backup.roster||{};
-      await save();
+      save();
 
       // restore audit data to localStorage
       if(backup.auditData){
@@ -1099,9 +1099,9 @@ async function importBackup(input){
 }
 
 /* ---------- INIT ---------- */
-(async function(){
+(function(){
   document.getElementById('todayDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  await load();
+  load();
   renderSteps();
   renderAll();
 })();
