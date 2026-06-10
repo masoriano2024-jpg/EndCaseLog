@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -205,6 +206,16 @@
 
   .roster-line{display:flex;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--line);font-size:14px;align-items:center}
   .roster-line:last-child{border:none}
+  .roster-line:hover{background:var(--blue-bg)}
+  .roster-line.active-row{background:var(--blue-pale);border-left:3px solid var(--blue)}
+  .profile-stat{background:var(--blue-bg);border-radius:7px;padding:10px 14px;text-align:center}
+  .profile-stat-val{font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--navy)}
+  .profile-stat-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-top:3px}
+  .profile-log-row{padding:10px 0;border-bottom:1px solid var(--line)}
+  .profile-log-row:last-child{border:none}
+  .profile-audit-row{padding:10px 0;border-bottom:1px solid var(--line)}
+  .profile-audit-row:last-child{border:none}
+  @media(max-width:800px){#rosterLayout{grid-template-columns:1fr}}
   .mini{font-size:12px;color:var(--gray-light)}
   @media(max-width:640px){header.top{padding:16px}main{padding:20px 14px}}
 
@@ -322,8 +333,11 @@
   <!-- ROSTER -->
   <section class="panel" id="roster">
     <h2 class="sec">Roster</h2>
-    <p class="sec-note">Every survivor by ID. Names stay with you — store them here or on paper, your call.</p>
-    <div id="rosterList" style="background:#fbf8f0;border:1px solid var(--line);border-radius:3px;box-shadow:var(--shadow)"></div>
+    <p class="sec-note">Every survivor by ID. Click any row to see their full profile — contact logs, case history, and audit records.</p>
+    <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start" id="rosterLayout">
+      <div id="rosterList" style="background:var(--white);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-card);overflow:hidden"></div>
+      <div id="clientProfile" style="display:none"></div>
+    </div>
   </section>
 
   <!-- WEEKLY -->
@@ -702,21 +716,127 @@ function saveLog(){
 }
 
 /* ---------- ROSTER ---------- */
+let activeRosterId = null;
+
 function renderRoster(){
   const el=document.getElementById('rosterList');
   const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number)])].sort((a,b)=>a-b);
-  if(ids.length===0){el.innerHTML='<div class="empty">No survivors yet.</div>';return;}
+  if(ids.length===0){el.innerHTML='<div class="empty" style="padding:20px;color:var(--gray-light);font-size:13px">No survivors yet.</div>';return;}
   el.innerHTML=ids.map(id=>{
-    const c=cases.find(c=>c.id===id);
+    const c=cases.find(x=>x.id===id);
     const st=c?c.status:'—';
     const cnt=logs.filter(l=>l.id===id).length;
-    return `<div class="roster-line">
-      <div><b>#${id}</b> <input style="width:auto;display:inline-block;border:1px solid transparent;background:transparent" value="${esc(roster[id]||'')}" placeholder="add name…" onchange="setName(${id},this.value)"></div>
-      <div class="mini">status: <b>${st}</b> · ${cnt} contact log${cnt!==1?'s':''} <button class="btn sm ghost" style="margin-left:8px" onclick="deleteClient(${id})" title="Delete entirely">🗑 Delete</button></div>
+    const isActive=id===activeRosterId;
+    const statusColor=st==='outreach'?'var(--amber)':st==='intake'?'var(--blue)':st==='open'?'var(--green)':'var(--gray-light)';
+    return `<div class="roster-line${isActive?' active-row':''}" onclick="openClientProfile(${id})" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy)">#${id}</span>
+        <span style="font-size:11px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:.3px">${st}</span>
+      </div>
+      <div class="mini">${roster[id]?esc(roster[id]):'<i>no name stored</i>'} · ${cnt} log${cnt!==1?'s':''}</div>
     </div>`;
   }).join('');
+  if(activeRosterId) openClientProfile(activeRosterId,true);
 }
+
 function setName(id,v){if(v.trim())roster[id]=v.trim();else delete roster[id];save();}
+
+function openClientProfile(id, silent=false){
+  activeRosterId=id;
+  if(!silent) renderRoster();
+  const el=document.getElementById('clientProfile');
+  el.style.display='block';
+
+  const c=cases.find(x=>x.id===id);
+  const clientLogs=[...logs.filter(l=>l.id===id)].sort((a,b)=>b.date.localeCompare(a.date));
+  const auditList=auditLoadList(id);
+  const name=roster[id]||null;
+
+  // case info section
+  let caseHtml='';
+  if(c){
+    const steps=stepsFor(c);
+    const stepLabel=steps[c.step]?steps[c.step].t:'—';
+    const statusColor=c.status==='outreach'?'var(--amber)':c.status==='intake'?'var(--blue)':c.status==='open'?'var(--green)':'var(--gray-light)';
+    caseHtml=`
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
+        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</div><div class="profile-stat-lbl">Status</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
+      </div>
+      <div style="font-size:13px;color:var(--gray);padding:10px 0 4px">
+        ${c.status==='outreach'||c.status==='intake'?`<b>Current step:</b> ${c.step+1} of ${steps.length} — ${esc(stepLabel)}`:''}
+      </div>`;
+  } else {
+    caseHtml='<div style="font-size:13px;color:var(--gray-light);padding:8px 0">No active case found.</div>';
+  }
+
+  // contact logs section
+  const logHtml=clientLogs.length===0
+    ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No contact logs recorded.</div>'
+    :clientLogs.map(l=>{
+      const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
+      return `<div class="profile-log-row">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap">${fmt(l.date)}</span>
+          <span style="font-size:11px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
+          <span style="font-size:11px;font-weight:700;color:${resultColor}">${l.result||'—'}</span>
+        </div>
+        ${l.notes?`<div style="font-size:12px;color:var(--gray);margin-top:3px">${esc(l.notes)}</div>`:''}
+      </div>`;
+    }).join('');
+
+  // audit section
+  const auditHtml=auditList.length===0
+    ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No audit records saved yet.</div>'
+    :[...auditList].reverse().map((entry,i)=>{
+      const done=Object.values(entry.checked||{}).filter(Boolean).length;
+      const total=Object.keys(entry.checked||{}).length;
+      const pct=total?Math.round((done/total)*100):0;
+      return `<div class="profile-audit-row">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;color:var(--navy)">${entry.savedAt?new Date(entry.savedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Audit '+(auditList.length-i)}</span>
+          <span style="font-size:11px;font-weight:700;color:${pct===100?'var(--green)':'var(--blue)'}">${pct}% complete · ${done}/${total} items</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  el.innerHTML=`
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-card);overflow:hidden">
+
+      <!-- HEADER -->
+      <div style="background:var(--navy);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
+          ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName(${id},this.value);renderRoster()">
+          <button class="btn sm ghost" style="color:var(--white);border-color:rgba(255,255,255,.3)" onclick="activeRosterId=null;document.getElementById('clientProfile').style.display='none';renderRoster()">✕ Close</button>
+        </div>
+      </div>
+
+      <!-- CASE STATUS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Status</div>
+        ${caseHtml}
+      </div>
+
+      <!-- CONTACT LOGS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Contact History <span style="font-weight:500;text-transform:none;letter-spacing:0">(${clientLogs.length} log${clientLogs.length!==1?'s':''} total)</span></div>
+        ${logHtml}
+      </div>
+
+      <!-- AUDIT HISTORY -->
+      <div style="padding:16px 20px">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Audit History <span style="font-weight:500;text-transform:none;letter-spacing:0">(${auditList.length} saved)</span></div>
+        ${auditHtml}
+        ${auditList.length>0?`<button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=audit]').click();document.getElementById('auditClientInput').value='${id}';auditLoad()">Open in Audit Tab →</button>`:''}
+      </div>
+
+    </div>`;
+}
 
 /* ---------- WEEKLY REPORT ---------- */
 /* ---------- WEEKLY REPORT DASHBOARD ---------- */
@@ -759,9 +879,7 @@ function renderWeekStats(wedISO){
   // logs in this window
   const weekLogs=logs.filter(l=>l.date>=start&&l.date<=end);
   const totalAttempts=weekLogs.length;
-  const successful=weekLogs.filter(l=>l.outcome==='reached'||l.outcome==='success'||l.type==='reached').length;
-  // fallback: if outcome not stored, count non-voicemail logs as successful
-  const successCount=successful||weekLogs.filter(l=>l.result&&l.result!=='no-answer'&&l.result!=='voicemail').length;
+  const successCount=weekLogs.filter(l=>l.result==='Made contact').length;
 
   // cases opened this week
   const newCases=cases.filter(c=>c.started>=start&&c.started<=end).length;
@@ -776,7 +894,7 @@ function renderWeekStats(wedISO){
   if(!el)return;
   el.innerHTML=
     statCard('Contacts Attempted',totalAttempts,'all logged this week','var(--blue)')+
-    statCard('Successful Contacts',weekLogs.length>0?weekLogs.length-successCount>0?successCount:totalAttempts:0,'reached survivor','var(--green)')+
+    statCard('Successful Contacts',successCount,'made contact with survivor','var(--green)')+
     statCard('New Cases This Week',newCases,'assigned','var(--blue-light)')+
     statCard('Pending Cases',pending,'outreach + intake','var(--amber)')+
     statCard('Closed This Week',closedThisWeek,'resolved or no contact','var(--gray)')+
@@ -819,12 +937,14 @@ function renderWeekly(){
     t.innerHTML='<tr><td colspan="5" style="padding:20px;color:var(--gray-light);font-size:13px;text-align:center">No contact logs recorded this week.</td></tr>';
     return;
   }
-  let h=`<tr><th>Date</th><th>Client ID</th><th>Type</th><th>Notes</th></tr>`;
+  let h=`<tr><th>Date</th><th>Client ID</th><th>Method</th><th>Result</th><th>Notes</th></tr>`;
   weekLogs.forEach(l=>{
+    const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
     h+=`<tr>
       <td style="white-space:nowrap">${fmt(l.date)}</td>
       <td><span class="case-id" style="font-size:12px">#${l.caseId||l.id||'—'}</span></td>
-      <td style="text-transform:capitalize">${l.type||'—'}</td>
+      <td style="text-transform:capitalize">${l.method||l.type||'—'}</td>
+      <td style="font-size:12px;font-weight:600;color:${resultColor}">${l.result||'—'}</td>
       <td style="font-size:12px;color:var(--gray)">${esc(l.notes||l.note||'')}</td>
     </tr>`;
   });
