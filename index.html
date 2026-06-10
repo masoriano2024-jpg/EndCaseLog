@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -181,6 +182,22 @@
   details.path ol{padding:4px 16px 14px 40px;font-size:14px;color:var(--gray)}
   details.path li{margin:5px 0}
   details.path li.cur{color:var(--blue);font-weight:700}
+  .step-count{font-size:11px;font-weight:500;color:var(--gray);margin-left:8px;text-transform:none;letter-spacing:0}
+  .steps-editor{border-top:1px solid var(--line)}
+  .step-header{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--blue-bg);font-size:11px}
+  .step-row{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line)}
+  .step-row:hover{background:var(--blue-bg)}
+  .step-num{width:22px;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;color:var(--gray-light);text-align:center;flex-shrink:0}
+  .step-input{flex:1;font-family:'Open Sans',sans-serif;font-size:13px;border:1.5px solid var(--line);border-radius:5px;padding:6px 10px;color:var(--ink);background:var(--white)}
+  .step-input:focus{outline:none;border-color:var(--blue)}
+  .step-offset{width:110px;font-size:12px;border:1.5px solid var(--line);border-radius:5px;padding:5px 6px;color:var(--ink);background:var(--white);flex-shrink:0}
+  .step-offset-ph{width:110px;flex-shrink:0;font-size:12px;color:var(--gray-light);padding-left:4px}
+  .step-btns{display:flex;gap:4px;flex-shrink:0}
+  .step-btn{font-size:12px;padding:4px 7px;border:1.5px solid var(--line);border-radius:4px;background:var(--white);cursor:pointer;color:var(--gray);font-weight:600}
+  .step-btn:hover:not([disabled]){background:var(--blue-pale);border-color:var(--blue);color:var(--blue)}
+  .step-btn.red{color:var(--red)}
+  .step-btn.red:hover{background:#fff0f0;border-color:var(--red)}
+  .step-btn[disabled]{opacity:.3;cursor:default}
 
   .roster-line{display:flex;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--line);font-size:14px;align-items:center}
   .roster-line:last-child{border:none}
@@ -323,7 +340,7 @@
   <!-- STEPS REFERENCE -->
   <section class="panel" id="steps">
     <h2 class="sec">The Two Paths</h2>
-    <p class="sec-note">Reference for the full sequence. Your active cases follow these automatically.</p>
+    <p class="sec-note">Edit the global step templates here. Changes apply to all new cases. Use the ↑↓ arrows to reorder, ✕ to delete, and ＋ to add steps. Due date offsets only apply to Path A (Outreach).</p>
     <div id="stepsRef"></div>
   </section>
 
@@ -439,7 +456,7 @@
 
 <script>
 /* ---------- DATA MODEL ---------- */
-const OUTREACH = [
+const OUTREACH_DEFAULT = [
   {t:"Survivor is assigned", offset:{type:"start"}},
   {t:"Phone call within 24 hours", offset:{type:"cal",n:1}},
   {t:"48 hrs: call again + mail recruitment letter", offset:{type:"cal",n:2}},
@@ -456,7 +473,7 @@ const OUTREACH = [
   {t:"Business Day 6 — contact attempt", offset:{type:"bus",n:6}},
   {t:"Business Day 7 — contact attempt + send FINAL closure letter", offset:{type:"bus",n:7}}
 ];
-const INTAKE = [
+const INTAKE_DEFAULT = [
   {t:"Phone Triage form"},
   {t:"Eligibility form + review needed documentation"},
   {t:"Set up intake appointment (if repairs → schedule CCA)"},
@@ -465,6 +482,8 @@ const INTAKE = [
   {t:"Input all documents in TCR"},
   {t:"Recovery plan signed by supervisor"}
 ];
+let OUTREACH = OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:undefined}));
+let INTAKE = INTAKE_DEFAULT.map(s=>({...s}));
 
 let cases = [];
 let logs = [];
@@ -478,12 +497,25 @@ function save(){
     localStorage.setItem('logs', JSON.stringify(logs));
     localStorage.setItem('weekly', JSON.stringify(weekly));
     localStorage.setItem('roster', JSON.stringify(roster));
+    localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
+    localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
   }catch(e){console.error('save failed',e)}
 }
 function load(){
   for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['weekly',v=>weekly=v],['roster',v=>roster=v]]){
     try{ const raw=localStorage.getItem(k); if(raw) setter(JSON.parse(raw)); }catch(e){}
   }
+  try{ const r=localStorage.getItem('outreach_tpl'); if(r) OUTREACH=JSON.parse(r); }catch(e){}
+  try{ const r=localStorage.getItem('intake_tpl'); if(r) INTAKE=JSON.parse(r); }catch(e){}
+}
+function saveTemplates(){
+  localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
+  localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
+}
+function stepsFor(c){
+  const path=c.status==='intake'?'intake':'outreach';
+  if(c.customSteps&&c.customSteps[path]) return c.customSteps[path];
+  return path==='outreach'?OUTREACH:INTAKE;
 }
 
 /* ---------- DATE HELPERS ---------- */
@@ -539,7 +571,8 @@ function renderDash(){
       </div>`;
     }
     if(c.status==='intake'){
-      const total=INTAKE.length;
+      const steps=stepsFor(c);
+      const total=steps.length;
       const lastStep=c.step===total-1;
       return `<div class="case-card intake">
         <div class="case-head">
@@ -547,7 +580,7 @@ function renderDash(){
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
           <span class="due-chip green">In progress</span>
         </div>
-        <div class="case-step">Step ${c.step+1} of ${total}: <b>${INTAKE[c.step].t}</b></div>
+        <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
         <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
         <div class="case-actions">
           <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
@@ -566,14 +599,14 @@ function renderDash(){
     else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';due++;}
     else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';due++;}
     else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
-    const total=OUTREACH.length;
+    const steps=stepsFor(c);const total=steps.length;
     return `<div class="case-card ${cls}">
       <div class="case-head">
         <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
-      <div class="case-step">Step ${c.step+1} of ${total}: <b>${OUTREACH[c.step].t}</b></div>
+      <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
       <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
         <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
@@ -602,7 +635,7 @@ function startCase(){
 }
 function nextStep(id){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
-  const arr=c.status==='outreach'?OUTREACH:INTAKE;
+  const arr=stepsFor(c);
   if(c.step<arr.length-1){c.step++;}
   else if(c.status==='intake'){c.status='open';c.openedAt=todayISO();}
   save();renderAll();
@@ -619,7 +652,7 @@ function closeOpenCase(id){
 }
 function reopenIntake(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
-  c.status='intake';c.step=INTAKE.length-1;save();renderAll();
+  c.status='intake';c.step=(c.customSteps&&c.customSteps.intake?c.customSteps.intake:INTAKE).length-1;save();renderAll();
 }
 function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;save();renderAll();}}
 function closeCase(id,status){
@@ -715,17 +748,106 @@ function exportCSV(){
   a.download='weekly_report_'+todayISO()+'.csv';a.click();
 }
 
-/* ---------- STEPS REFERENCE ---------- */
+/* ---------- STEPS EDITOR ---------- */
+function offsetLabel(o){
+  if(!o||o.type==='start') return 'Start';
+  if(o.type==='cal') return `Cal Day ${o.n}`;
+  if(o.type==='bus') return `Bus Day ${o.n}`;
+  return '';
+}
+function offsetVal(o){
+  if(!o||o.type==='start') return 'start';
+  return `${o.type}:${o.n}`;
+}
+function parseOffset(v){
+  if(v==='start') return {type:'start'};
+  const [type,n]=v.split(':');
+  return {type,n:parseInt(n)};
+}
+
 function renderSteps(){
   const el=document.getElementById('stepsRef');
-  el.innerHTML=`
-    <details class="path" open><summary>Path A · No Contact (15 steps)</summary>
-      <ol>${OUTREACH.map(s=>`<li>${s.t}</li>`).join('')}</ol>
-      <p class="mini" style="padding:0 16px 12px">If contact is made &amp; they decline → close in TCR. If they accept → Intake (Path B).</p>
-    </details>
-    <details class="path"><summary>Path B · Intake (after acceptance, 7 steps)</summary>
-      <ol>${INTAKE.map(s=>`<li>${s.t}</li>`).join('')}</ol>
-    </details>`;
+  el.innerHTML=renderPathEditor('outreach',OUTREACH,'Path A · No Contact','outreach')+
+    renderPathEditor('intake',INTAKE,'Path B · Intake','intake');
+}
+
+function renderPathEditor(key,steps,title,cls){
+  const rows=steps.map((s,i)=>{
+    const isOutreach=key==='outreach';
+    return `<div class="step-row" data-path="${key}" data-idx="${i}">
+      <span class="step-num">${i+1}</span>
+      <input class="step-input" type="text" value="${esc(s.t)}" onchange="updateStepLabel('${key}',${i},this.value)">
+      ${isOutreach?`<select class="step-offset" onchange="updateStepOffset('${key}',${i},this.value)">
+        <option value="start" ${offsetVal(s.offset)==='start'?'selected':''}>Start</option>
+        ${[1,2,3,4,5,6,7].map(n=>`<option value="cal:${n}" ${offsetVal(s.offset)===`cal:${n}`?'selected':''}>Cal Day ${n}</option>`).join('')}
+        ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="bus:${n}" ${offsetVal(s.offset)===`bus:${n}`?'selected':''}>Bus Day ${n}</option>`).join('')}
+      </select>`:'<span class="step-offset-ph">—</span>'}
+      <div class="step-btns">
+        <button class="step-btn" title="Move up" onclick="moveStep('${key}',${i},-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="step-btn" title="Move down" onclick="moveStep('${key}',${i},1)" ${i===steps.length-1?'disabled':''}>↓</button>
+        <button class="step-btn red" title="Delete step" onclick="deleteStep('${key}',${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<details class="path" open>
+    <summary>${title} <span class="step-count">${steps.length} steps</span></summary>
+    <div class="steps-editor">
+      <div class="step-header">
+        <span class="step-num">#</span>
+        <span style="flex:1;font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.4px">Step Label</span>
+        ${key==='outreach'?'<span style="width:110px;font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.4px">Due Date</span>':'<span style="width:30px"></span>'}
+        <span style="width:90px;font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.4px">Actions</span>
+      </div>
+      ${rows}
+      <div style="padding:12px 16px;display:flex;gap:10px;border-top:1px solid var(--line)">
+        <button class="btn sm green" onclick="addStep('${key}')">＋ Add Step</button>
+        <button class="btn sm ghost" onclick="resetPath('${key}')">↺ Reset to Default</button>
+      </div>
+    </div>
+    ${key==='outreach'?`<p class="mini" style="padding:0 16px 12px">If contact is made &amp; they decline → close in TCR. If they accept → Intake (Path B).</p>`:''}
+  </details>`;
+}
+
+function updateStepLabel(path,idx,val){
+  const arr=path==='outreach'?OUTREACH:INTAKE;
+  arr[idx].t=val;
+  saveTemplates();
+}
+function updateStepOffset(path,idx,val){
+  const arr=path==='outreach'?OUTREACH:INTAKE;
+  arr[idx].offset=parseOffset(val);
+  saveTemplates();
+}
+function moveStep(path,idx,dir){
+  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const ni=idx+dir;
+  if(ni<0||ni>=arr.length)return;
+  [arr[idx],arr[ni]]=[arr[ni],arr[idx]];
+  saveTemplates();renderSteps();
+}
+function deleteStep(path,idx){
+  if(!confirm('Delete this step from the global template?'))return;
+  const arr=path==='outreach'?OUTREACH:INTAKE;
+  arr.splice(idx,1);
+  saveTemplates();renderSteps();
+}
+function addStep(path){
+  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const newStep=path==='outreach'?{t:'New step',offset:{type:'cal',n:1}}:{t:'New step'};
+  arr.push(newStep);
+  saveTemplates();renderSteps();
+  // focus new input
+  setTimeout(()=>{
+    const rows=document.querySelectorAll(`.step-row[data-path="${path}"]`);
+    if(rows.length){const inp=rows[rows.length-1].querySelector('.step-input');if(inp){inp.focus();inp.select();}}
+  },50);
+}
+function resetPath(path){
+  if(!confirm(`Reset Path ${path==='outreach'?'A (No Contact)':'B (Intake)'} to the original defaults? This cannot be undone.`))return;
+  if(path==='outreach') OUTREACH=OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:undefined}));
+  else INTAKE=INTAKE_DEFAULT.map(s=>({...s}));
+  saveTemplates();renderSteps();
 }
 
 /* ---------- TABS / MODALS ---------- */
