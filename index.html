@@ -463,6 +463,8 @@
       <option value="Made contact">Made contact</option>
       <option value="Left message">Left message / voicemail</option>
     </select>
+    <label>Notes (optional)</label>
+    <textarea id="logNotes" placeholder="e.g. Spoke briefly, called back tomorrow. Left message with spouse." style="width:100%;min-height:80px;font-family:'Open Sans',sans-serif;font-size:13px;border:1.5px solid var(--line);border-radius:6px;padding:8px 10px;color:var(--ink);resize:vertical;box-sizing:border-box"></textarea>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('logModal')">Cancel</button>
       <button class="btn gold" onclick="saveLog()">Log It</button>
@@ -711,8 +713,12 @@ function saveLog(){
   const id=parseInt(document.getElementById('logId').value);
   if(!id){alert('Enter the survivor ID.');return;}
   const method=document.querySelector('input[name=method]:checked').value;
-  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),result:document.getElementById('logResult').value});
+  const notes=document.getElementById('logNotes').value.trim();
+  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),result:document.getElementById('logResult').value,notes});
+  document.getElementById('logNotes').value='';
+  document.getElementById('logResult').selectedIndex=0;
   closeModal('logModal');save();renderAll();
+  if(activeRosterId===id) openClientProfile(id,true);
 }
 
 /* ---------- ROSTER ---------- */
@@ -776,13 +782,14 @@ function openClientProfile(id, silent=false){
     ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No contact logs recorded.</div>'
     :clientLogs.map(l=>{
       const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
+      const resultIcon=l.result==='Made contact'?'✓':l.result==='Left message'?'💬':'✗';
       return `<div class="profile-log-row">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap">${fmt(l.date)}</span>
-          <span style="font-size:11px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
-          <span style="font-size:11px;font-weight:700;color:${resultColor}">${l.result||'—'}</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}</span>
+          <span style="font-size:11px;background:var(--blue-bg);border-radius:4px;padding:2px 7px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
+          <span style="font-size:11px;font-weight:700;color:${resultColor}">${resultIcon} ${l.result||'—'}</span>
         </div>
-        ${l.notes?`<div style="font-size:12px;color:var(--gray);margin-top:3px">${esc(l.notes)}</div>`:''}
+        ${l.notes?`<div style="font-size:12px;color:var(--ink);background:var(--blue-bg);border-left:3px solid var(--line);border-radius:0 5px 5px 0;padding:6px 10px;margin-top:6px;line-height:1.5">${esc(l.notes)}</div>`:''}
       </div>`;
     }).join('');
 
