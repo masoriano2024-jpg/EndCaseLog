@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -455,8 +454,11 @@
       <label><input type="radio" name="method" value="Text"><span>💬 Text</span></label>
       <label><input type="radio" name="method" value="Email"><span>✉ Email</span></label>
     </div>
-    <label>Date</label>
-    <input type="date" id="logDate">
+    <label>Date &amp; Time</label>
+    <div style="display:flex;gap:10px">
+      <input type="date" id="logDate" style="flex:1">
+      <input type="time" id="logTime" style="width:120px">
+    </div>
     <label>Result (optional)</label>
     <select id="logResult">
       <option value="No answer">No answer / no contact</option>
@@ -708,13 +710,20 @@ function decide(kind){
 }
 
 /* ---------- LOG CONTACT ---------- */
-function openLog(){document.getElementById('logDate').value=todayISO();document.getElementById('logId').value='';show('logModal')}
+function openLog(){
+  const now=new Date();
+  document.getElementById('logDate').value=todayISO();
+  document.getElementById('logTime').value=now.toTimeString().slice(0,5);
+  document.getElementById('logId').value='';
+  show('logModal');
+}
 function saveLog(){
   const id=parseInt(document.getElementById('logId').value);
   if(!id){alert('Enter the survivor ID.');return;}
   const method=document.querySelector('input[name=method]:checked').value;
   const notes=document.getElementById('logNotes').value.trim();
-  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),result:document.getElementById('logResult').value,notes});
+  const time=document.getElementById('logTime').value||'';
+  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),time,result:document.getElementById('logResult').value,notes});
   document.getElementById('logNotes').value='';
   document.getElementById('logResult').selectedIndex=0;
   closeModal('logModal');save();renderAll();
@@ -785,7 +794,7 @@ function openClientProfile(id, silent=false){
       const resultIcon=l.result==='Made contact'?'✓':l.result==='Left message'?'💬':'✗';
       return `<div class="profile-log-row">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}${l.time?` <span style="font-weight:500;color:var(--gray-light)">${l.time}</span>`:''}</span>
           <span style="font-size:11px;background:var(--blue-bg);border-radius:4px;padding:2px 7px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
           <span style="font-size:11px;font-weight:700;color:${resultColor}">${resultIcon} ${l.result||'—'}</span>
         </div>
@@ -948,7 +957,7 @@ function renderWeekly(){
   weekLogs.forEach(l=>{
     const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
     h+=`<tr>
-      <td style="white-space:nowrap">${fmt(l.date)}</td>
+      <td style="white-space:nowrap">${fmt(l.date)}${l.time?`<br><span style="font-size:11px;color:var(--gray-light)">${l.time}</span>`:''}</td>
       <td><span class="case-id" style="font-size:12px">#${l.caseId||l.id||'—'}</span></td>
       <td style="text-transform:capitalize">${l.method||l.type||'—'}</td>
       <td style="font-size:12px;font-weight:600;color:${resultColor}">${l.result||'—'}</td>
