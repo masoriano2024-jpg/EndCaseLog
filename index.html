@@ -620,6 +620,7 @@ function renderDash(){
           <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
           ${!lastStep?`<button class="btn sm green" onclick="markOpen(${c.id})" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
           <span style="flex:1"></span>
+          <button class="btn sm red" onclick="closeIntakeCase(${c.id})">Close Case</button>
           <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
         </div>
       </div>`;
@@ -688,6 +689,11 @@ function reopenIntake(id){
   c.status='intake';c.step=(c.customSteps&&c.customSteps.intake?c.customSteps.intake:INTAKE).length-1;save();renderAll();
 }
 function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;save();renderAll();}}
+function closeIntakeCase(id){
+  if(!confirm(`Close case #${id} from intake? This will mark it as closed.`))return;
+  const c=cases.find(c=>c.id===id);if(!c)return;
+  c.status='closed';c.closed=todayISO();save();renderAll();
+}
 function closeCase(id,status){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
   if(!confirm(status==='declined'?'Close case as DECLINED in TCR?':'Close this case (no contact made)?'))return;
