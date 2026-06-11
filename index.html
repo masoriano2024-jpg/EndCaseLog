@@ -619,6 +619,7 @@ function renderDash(){
           <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
           <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
           ${!lastStep?`<button class="btn sm green" onclick="markOpen(${c.id})" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
+          <button class="btn sm ghost" onclick="reopenOutreach(${c.id})" title="Move back to outreach">← Back to Outreach</button>
           <span style="flex:1"></span>
           <button class="btn sm red" onclick="closeIntakeCase(${c.id})">Close Case</button>
           <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
@@ -687,6 +688,10 @@ function closeOpenCase(id){
 function reopenIntake(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
   c.status='intake';c.step=(c.customSteps&&c.customSteps.intake?c.customSteps.intake:INTAKE).length-1;save();renderAll();
+}
+function reopenOutreach(id){
+  const c=cases.find(c=>c.id===id&&c.status==='intake');if(!c)return;
+  c.status='outreach';c.step=0;save();renderAll();
 }
 function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;save();renderAll();}}
 function closeIntakeCase(id){
