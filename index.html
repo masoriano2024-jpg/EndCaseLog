@@ -278,6 +278,7 @@
     border-radius:6px;transition:background .1s,box-shadow .1s;
   }
   .ah-row:hover{background:var(--blue-bg);box-shadow:var(--shadow-card)}
+  .ah-row.ah-current{background:var(--blue-pale);border-left:3px solid var(--blue)}
   .ah-date{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:600;color:var(--navy)}
   .ah-score{font-size:12px;color:var(--blue);font-weight:600}
   .ah-load{margin-left:auto;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;border:1.5px solid var(--line);padding:4px 12px;cursor:pointer;background:transparent;border-radius:5px;text-transform:uppercase;letter-spacing:.4px;transition:background .1s}
@@ -322,10 +323,7 @@
       <button class="btn gold big" onclick="openStart()">＋ Start New Case</button>
       <span class="mini">Assign a survivor and begin the timeline.</span>
     </div>
-    <div class="alert-bar">
-      <span>📋 Daily Reminder — here's what's due today</span>
-      <span class="count" id="dueCount">0 due</span>
-    </div>
+    <div id="dailyBriefing" style="margin-bottom:18px"></div>
     <div id="caseList"></div>
   </section>
 
@@ -567,14 +565,134 @@ function dueDateFor(c,stepIdx){
 }
 function daysUntil(iso){const a=new Date(todayISO()+'T00:00:00'),b=new Date(iso+'T00:00:00');return Math.round((b-a)/86400000)}
 
+/* ---------- DAILY BRIEFING ---------- */
+function renderBriefing(){
+  const el=document.getElementById('dailyBriefing');
+  if(!el)return;
+  const today=todayISO();
+  const active=cases.filter(c=>['outreach','intake','open'].includes(c.status));
+  const outreachCases=active.filter(c=>c.status==='outreach');
+  const intakeCases=active.filter(c=>c.status==='intake');
+  const openCases=active.filter(c=>c.status==='open');
+
+  // overdue and due today
+  const overdue=outreachCases.filter(c=>{const dd=dueDateFor(c,c.step);return dd<today;});
+  const dueToday=outreachCases.filter(c=>{const dd=dueDateFor(c,c.step);return dd===today;});
+  const dueSoon=outreachCases.filter(c=>{const dd=dueDateFor(c,c.step);return dd>today&&daysUntil(dd)<=2;});
+
+  // contacts logged today
+  const loggedToday=logs.filter(l=>l.date===today).length;
+
+  // step breakdown for outreach
+  const stepCounts={};
+  outreachCases.forEach(c=>{
+    const steps=stepsFor(c);
+    const label=steps[c.step]?`Step ${c.step+1}: ${steps[c.step].t}`:`Step ${c.step+1}`;
+    stepCounts[label]=(stepCounts[label]||0)+1;
+  });
+
+  // build urgency line
+  let urgencyHtml='';
+  if(overdue.length>0){
+    urgencyHtml+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fff0f0;border-radius:6px;margin-bottom:8px">
+      <span style="font-size:16px">🚨</span>
+      <span style="font-size:13px;font-weight:700;color:var(--red)">${overdue.length} overdue case${overdue.length!==1?'s':''} — </span>
+      <span style="font-size:13px;color:var(--red)">${overdue.map(c=>`#${c.id}`).join(', ')}</span>
+    </div>`;
+  }
+  if(dueToday.length>0){
+    urgencyHtml+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fffbea;border-radius:6px;margin-bottom:8px">
+      <span style="font-size:16px">📅</span>
+      <span style="font-size:13px;font-weight:700;color:var(--amber)">${dueToday.length} due today — </span>
+      <span style="font-size:13px;color:var(--amber)">${dueToday.map(c=>`#${c.id}`).join(', ')}</span>
+    </div>`;
+  }
+  if(dueSoon.length>0){
+    urgencyHtml+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--blue-bg);border-radius:6px;margin-bottom:8px">
+      <span style="font-size:16px">⏰</span>
+      <span style="font-size:13px;font-weight:600;color:var(--navy)">${dueSoon.length} coming up in the next 2 days — </span>
+      <span style="font-size:13px;color:var(--gray)">${dueSoon.map(c=>`#${c.id}`).join(', ')}</span>
+    </div>`;
+  }
+
+  // step breakdown
+  let stepHtml='';
+  if(outreachCases.length>0){
+    stepHtml=Object.entries(stepCounts).map(([label,count])=>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">
+        <span style="color:var(--gray);flex:1">${esc(label)}</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy);margin-left:12px;white-space:nowrap">${count} client${count!==1?'s':''}</span>
+      </div>`
+    ).join('');
+  }
+
+  const totalDue=overdue.length+dueToday.length;
+
+  el.innerHTML=`
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+
+      <!-- HEADER -->
+      <div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;color:var(--white)">
+          📋 Daily Briefing
+        </div>
+        <div style="font-size:12px;color:#7bb8e8">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+      </div>
+
+      <!-- STAT ROW -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:0;border-bottom:1px solid var(--line)">
+        ${briefingStat('Active Cases',active.length,'var(--navy)')}
+        ${briefingStat('In Outreach',outreachCases.length,'var(--amber)')}
+        ${briefingStat('In Intake',intakeCases.length,'var(--blue)')}
+        ${briefingStat('Open Cases',openCases.length,'var(--green)')}
+        ${briefingStat('Due/Overdue',totalDue,totalDue>0?'var(--red)':'var(--green)')}
+        ${briefingStat('Logged Today',loggedToday,'var(--gray)')}
+      </div>
+
+      <!-- URGENCY ALERTS -->
+      ${urgencyHtml||overdue.length===0&&dueToday.length===0?`<div style="padding:12px 16px">${urgencyHtml||'<span style="font-size:13px;color:var(--green);font-weight:600">✓ No overdue or due-today items.</span>'}</div>`:'<div style="padding:12px 16px">'+urgencyHtml+'</div>'}
+
+      <!-- STEP BREAKDOWN -->
+      ${outreachCases.length>0?`
+      <div style="padding:12px 16px;border-top:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Outreach Step Breakdown</div>
+        ${stepHtml}
+      </div>`:''}
+
+      <!-- INTAKE SNAPSHOT -->
+      ${intakeCases.length>0?`
+      <div style="padding:12px 16px;border-top:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Intake in Progress</div>
+        ${intakeCases.map(c=>{
+          const steps=stepsFor(c);
+          const pct=Math.round((c.step/(steps.length-1))*100);
+          return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">
+            <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy);min-width:32px">#${c.id}</span>
+            <div style="flex:1;height:5px;background:var(--line);border-radius:3px">
+              <div style="width:${pct}%;height:100%;background:var(--blue);border-radius:3px"></div>
+            </div>
+            <span style="color:var(--gray);min-width:140px">Step ${c.step+1}/${steps.length}: ${esc(steps[c.step]?steps[c.step].t:'—')}</span>
+          </div>`;
+        }).join('')}
+      </div>`:''}
+
+    </div>`;
+}
+
+function briefingStat(label,value,color){
+  return `<div style="padding:12px 10px;text-align:center;border-right:1px solid var(--line)">
+    <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:${color}">${value}</div>
+    <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--gray);margin-top:3px">${label}</div>
+  </div>`;
+}
+
 /* ---------- RENDER DASHBOARD ---------- */
 function renderDash(){
+  renderBriefing();
   const list=document.getElementById('caseList');
   const active=cases.filter(c=>c.status==='outreach'||c.status==='intake'||c.status==='open');
-  let due=0;
   if(active.length===0){
     list.innerHTML='<div class="empty">No active cases. Press <b>Start New Case</b> when a survivor is assigned.<br><span class="mini">"For everything there is a season." — Ecclesiastes 3:1</span></div>';
-    document.getElementById('dueCount').textContent='0 due';
     return;
   }
   // sort: outreach by urgency first, then intake, then open
@@ -630,9 +748,9 @@ function renderDash(){
     const dd=dueDateFor(c,c.step);
     const du=daysUntil(dd);
     let cls='ok',chip='green',chiptxt='Due '+fmt(dd);
-    if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;due++;}
-    else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';due++;}
-    else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';due++;}
+    if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;}
+    else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';}
+    else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';}
     else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
     const steps=stepsFor(c);const total=steps.length;
     return `<div class="case-card ${cls}">
@@ -653,7 +771,6 @@ function renderDash(){
       </div>
     </div>`;
   }).join('');
-  document.getElementById('dueCount').textContent=due+' due';
 }
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
 
@@ -1241,8 +1358,16 @@ function auditLoad(){
   const raw=document.getElementById('auditClientInput').value.trim();
   if(!raw){alert('Enter a Client ID first.');return;}
   auditClientId=raw;
-  auditSavedIndex=null;
-  auditChecked={};
+  const list=auditLoadList(auditClientId);
+  if(list.length>0){
+    // resume from the most recent audit automatically
+    const last=list[list.length-1];
+    auditChecked=last.checked?{...last.checked}:{};
+    auditSavedIndex=list.length-1;
+  } else {
+    auditChecked={};
+    auditSavedIndex=null;
+  }
   document.getElementById('auditNewBtn').style.display='inline-block';
   auditRender();
 }
@@ -1300,16 +1425,33 @@ function auditRender(){
 
   const list=auditLoadList(auditClientId);
   if(list.length>0){
-    html+=`<div class="audit-history"><h4>Audit History — Client #${esc(auditClientId)}</h4>`;
-    list.forEach((entry,idx)=>{
+    html+=`<div class="audit-history"><h4>Audit History — Client #${esc(auditClientId)} <span style="font-weight:500;font-size:12px;color:var(--gray)">${list.length} saved snapshot${list.length!==1?'s':''}</span></h4>`;
+    [...list].reverse().forEach((entry,revIdx)=>{
+      const idx=list.length-1-revIdx;
       const op=entry.total?Math.round((entry.done/entry.total)*100):0;
-      const cur=idx===auditSavedIndex?' · <span style="color:var(--gold);font-style:italic">viewing</span>':'';
-      html+=`<div class="ah-row" onclick="auditLoadEntry(${idx})">
-        <span class="ah-date">${entry.date}</span>
-        <span class="ah-score">${entry.done}/${entry.total} (${op}%)</span>
-        <span class="mini">${cur}</span>
-        <button class="ah-load" onclick="event.stopPropagation();auditLoadEntry(${idx})">Load</button>
-        <button class="ah-del" onclick="event.stopPropagation();auditDeleteEntry(${idx})">Delete</button>
+      const isCurrent=idx===auditSavedIndex;
+      const barColor=op===100?'var(--green)':op>=50?'var(--blue)':'var(--amber)';
+      const savedLabel=entry.savedAt
+        ?new Date(entry.savedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})
+        :(entry.date+(entry.time?' · '+entry.time:''));
+      html+=`<div class="ah-row${isCurrent?' ah-current':''}" onclick="auditLoadEntry(${idx})">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="ah-date">${savedLabel}</span>
+            ${isCurrent?'<span style="font-size:11px;font-weight:700;background:var(--gold);color:var(--white);border-radius:3px;padding:1px 6px">Current</span>':''}
+            ${idx===list.length-1&&!isCurrent?'<span style="font-size:11px;color:var(--gray-light)">(most recent)</span>':''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
+            <div style="flex:1;height:4px;background:var(--line);border-radius:2px;max-width:160px">
+              <div style="width:${op}%;height:100%;background:${barColor};border-radius:2px"></div>
+            </div>
+            <span class="ah-score" style="color:${barColor}">${entry.done}/${entry.total} — ${op}%</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${!isCurrent?`<button class="ah-load" onclick="event.stopPropagation();auditLoadEntry(${idx})">Load</button>`:'<span style="font-size:11px;color:var(--gray-light);padding:0 4px">Loaded</span>'}
+          <button class="ah-del" onclick="event.stopPropagation();auditDeleteEntry(${idx})">Delete</button>
+        </div>
       </div>`;
     });
     html+=`</div>`;
@@ -1333,8 +1475,11 @@ function auditSave(){
   const list=auditLoadList(auditClientId);
   const total=auditTotal();
   const done=auditDone(auditChecked);
+  const now=new Date();
   const entry={
-    date:new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),
+    savedAt:now.toISOString(),
+    date:now.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
+    time:now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
     checked:{...auditChecked},done,total
   };
   if(auditSavedIndex!==null&&list[auditSavedIndex]){list[auditSavedIndex]=entry;}
