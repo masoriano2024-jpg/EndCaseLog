@@ -42,26 +42,25 @@
   }
   header.top{
     background:linear-gradient(135deg,#3a3a3a 0%,#4f4f4f 60%,#5a5a5a 100%);
-    padding:0 28px;
+    padding:0 32px;
     display:flex;align-items:center;justify-content:space-between;
     flex-wrap:wrap;gap:0;
-    border-bottom:3px solid var(--blue);
-    min-height:52px;
+    border-bottom:4px solid var(--blue);
+    min-height:72px;
   }
-  .brand{display:flex;align-items:center;gap:12px;padding:8px 0}
-  .brand h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:17px;color:var(--white);letter-spacing:.5px;text-transform:uppercase;line-height:1}
+  .brand{display:flex;align-items:center;gap:18px;padding:14px 0}
+  .brand h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:var(--white);letter-spacing:.5px;text-transform:uppercase}
   .brand h1 span{color:#7bb8e8}
-  .brand .sub{font-size:10px;color:#b0c8d8;font-weight:500;letter-spacing:.7px;text-transform:uppercase;margin-top:3px}
-  .today{font-size:11px;text-align:right;color:#b0c8d8;padding:8px 0;font-weight:500;letter-spacing:.3px}
-  .today b{display:inline;font-family:'Montserrat',sans-serif;font-size:13px;color:var(--white);font-weight:700;margin-left:6px}
+  .brand .sub{font-size:11px;color:#b0c8d8;font-weight:500;letter-spacing:.8px;text-transform:uppercase;margin-top:2px}
+  .today{font-size:12px;text-align:right;color:#b0c8d8;padding:14px 0;font-weight:500;letter-spacing:.3px}
+  .today b{display:block;font-family:'Montserrat',sans-serif;font-size:16px;color:var(--white);font-weight:700;margin-top:2px}
 
-  nav.tabs{display:flex;gap:0;background:var(--navy);padding:0;border-bottom:1px solid rgba(255,255,255,.08)}
+  nav.tabs{display:flex;gap:0;background:var(--navy);padding:0 28px;border-bottom:1px solid rgba(255,255,255,.08)}
   nav.tabs button{
     font-family:'Montserrat',sans-serif;font-size:12px;font-weight:600;
     background:none;border:none;border-bottom:3px solid transparent;
-    flex:1;padding:13px 8px;cursor:pointer;color:rgba(255,255,255,.5);
-    letter-spacing:.5px;text-transform:uppercase;transition:color .15s,border-color .15s;
-    text-align:center;white-space:nowrap;
+    padding:14px 18px;cursor:pointer;color:rgba(255,255,255,.5);
+    letter-spacing:.6px;text-transform:uppercase;transition:color .15s,border-color .15s;
   }
   nav.tabs button.active{color:var(--white);border-bottom-color:var(--blue)}
   nav.tabs button:hover{color:rgba(255,255,255,.85)}
@@ -105,16 +104,16 @@
   .alert-bar .count{background:var(--blue);padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700}
 
   .case-card{
-    background:var(--white);border:1px solid var(--line);border-left:6px solid var(--line);
+    background:var(--white);border:1px solid var(--line);border-left:5px solid var(--line);
     border-radius:8px;padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow-card);
     transition:box-shadow .15s;
   }
   .case-card:hover{box-shadow:0 4px 20px rgba(0,80,160,.13)}
-  .case-card.due{border-left-color:var(--red);background:#fff8f8;}
-  .case-card.soon{border-left-color:var(--amber);background:#fffdf5;}
-  .case-card.ok{border-left-color:var(--green);background:#f8fffa}
-  .case-card.intake{border-left-color:var(--blue);background:#f5faff}
-  .case-card.open{border-left-color:var(--green);background:#f5fff9}
+  .case-card.due{border-left-color:var(--red)}
+  .case-card.soon{border-left-color:var(--amber)}
+  .case-card.ok{border-left-color:var(--green)}
+  .case-card.intake{border-left-color:var(--blue)}
+  .case-card.open{border-left-color:var(--green);background:#f8fffe}
   .case-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
   .case-id{font-family:'Montserrat',sans-serif;font-weight:700;font-size:17px;color:var(--navy)}
   .case-id .tag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:8px;letter-spacing:.5px;text-transform:uppercase;vertical-align:middle}
@@ -125,9 +124,9 @@
   .tag.declined{background:var(--red-soft);color:var(--red)}
   .case-step{font-size:14px;margin-top:5px;color:var(--gray)}
   .case-step b{font-family:'Montserrat',sans-serif;font-weight:600;color:var(--ink)}
-  .due-chip{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;white-space:nowrap;letter-spacing:.3px;font-family:'Montserrat',sans-serif}
-  .due-chip.red{background:var(--red);color:#fff;box-shadow:0 2px 6px rgba(192,57,43,.35)}
-  .due-chip.amber{background:var(--amber);color:#fff;box-shadow:0 2px 6px rgba(212,134,10,.3)}
+  .due-chip{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.3px;font-family:'Montserrat',sans-serif}
+  .due-chip.red{background:var(--red-soft);color:var(--red)}
+  .due-chip.amber{background:var(--amber-soft);color:var(--amber)}
   .due-chip.green{background:var(--green-soft);color:var(--green)}
   .case-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
   .progress{height:4px;background:var(--blue-pale);border-radius:4px;margin-top:12px;overflow:hidden}
@@ -287,15 +286,16 @@
   .ah-del{font-size:11px;color:var(--red);background:none;border:none;font-family:'Montserrat',sans-serif;font-weight:700;cursor:pointer;padding:4px 8px;text-transform:uppercase;letter-spacing:.3px}
   .ah-del:hover{text-decoration:underline}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
 <header class="top">
   <div class="brand">
-    <div style="display:flex;flex-direction:column;gap:3px;margin-right:2px">
-      <div style="height:3px;width:20px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
-      <div style="height:5px;width:20px;background:#0090e8;border-radius:1px"></div>
-      <div style="height:3px;width:20px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-right:4px">
+      <div style="height:4px;width:26px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
+      <div style="height:6px;width:26px;background:#0090e8;border-radius:1px"></div>
+      <div style="height:4px;width:26px;background:#7bb8e8;opacity:.8;border-radius:1px"></div>
     </div>
     <div>
       <h1>END<span>≡</span>AVORS <span style="font-size:14px;opacity:.7;font-weight:600">DCM</span></h1>
@@ -305,6 +305,7 @@
   <div class="today">
     <span>Today</span>
     <b id="todayDate">—</b>
+    <div id="syncStatus" style="font-size:11px;margin-top:4px;font-weight:600;letter-spacing:.3px;min-height:16px"></div>
   </div>
 </header>
 
@@ -487,6 +488,11 @@
 </div>
 
 <script>
+/* ---------- SUPABASE INIT ---------- */
+const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzcXN0amt5dXl6dHZnbHV0dXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDg1NzUsImV4cCI6MjA5NzEyNDU3NX0.p9mHM3Ervz7Z5qezqDGUiSrb-u6JqKqLJSEEE8EyAio';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 /* ---------- DATA MODEL ---------- */
 const OUTREACH_DEFAULT = [
   {t:"Survivor is assigned", offset:{type:"start"}},
@@ -522,8 +528,10 @@ let logs = [];
 let weekly = [];
 let roster = {}; // id -> name
 
-/* ---------- STORAGE ---------- */
-function save(){
+/* ---------- STORAGE (Supabase + localStorage cache) ---------- */
+
+// ---- local cache helpers (fast UI, offline fallback) ----
+function cacheWrite(){
   try{
     localStorage.setItem('cases', JSON.stringify(cases));
     localStorage.setItem('logs', JSON.stringify(logs));
@@ -531,18 +539,169 @@ function save(){
     localStorage.setItem('roster', JSON.stringify(roster));
     localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
     localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
-  }catch(e){console.error('save failed',e)}
+  }catch(e){console.warn('cache write failed',e)}
 }
-function load(){
+function cacheRead(){
   for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['weekly',v=>weekly=v],['roster',v=>roster=v]]){
     try{ const raw=localStorage.getItem(k); if(raw) setter(JSON.parse(raw)); }catch(e){}
   }
   try{ const r=localStorage.getItem('outreach_tpl'); if(r) OUTREACH=JSON.parse(r); }catch(e){}
   try{ const r=localStorage.getItem('intake_tpl'); if(r) INTAKE=JSON.parse(r); }catch(e){}
 }
-function saveTemplates(){
+
+// ---- show/hide sync indicator ----
+function syncStart(){ const el=document.getElementById('syncStatus'); if(el){ el.textContent='⟳ Syncing…'; el.style.color='#7bb8e8'; } }
+function syncDone(){  const el=document.getElementById('syncStatus'); if(el){ el.textContent='✓ Synced';   el.style.color='#6ee7b7'; setTimeout(()=>{ if(el.textContent==='✓ Synced') el.textContent=''; },3000); } }
+function syncErr(msg){ const el=document.getElementById('syncStatus'); if(el){ el.textContent='⚠ '+msg; el.style.color='#fca5a5'; } console.error('Sync error:',msg); }
+
+// ---- LOAD from Supabase (on startup) ----
+async function load(){
+  // always read cache first so UI is instant
+  cacheRead();
+  renderAll();
+  try{
+    syncStart();
+    // cases
+    const {data:cData,error:cErr}=await sb.from('cases').select('*');
+    if(cErr) throw cErr;
+    cases=(cData||[]).map(r=>({
+      id:r.id, assigned:r.assigned, status:r.status, step:r.step,
+      started:r.started, closed:r.closed, intakeStart:r.intake_start,
+      openedAt:r.opened_at, customSteps:r.custom_steps||null
+    }));
+
+    // logs
+    const {data:lData,error:lErr}=await sb.from('contact_logs').select('*').order('date',{ascending:false});
+    if(lErr) throw lErr;
+    logs=(lData||[]).map(r=>({
+      id:r.case_id, method:r.method, date:r.date, time:r.time,
+      result:r.result, notes:r.notes, _dbId:r.id
+    }));
+
+    // roster
+    const {data:rData,error:rErr}=await sb.from('roster').select('*');
+    if(rErr) throw rErr;
+    roster={};
+    (rData||[]).forEach(r=>{ roster[r.case_id]=r.name; });
+
+    // step templates
+    const {data:tData,error:tErr}=await sb.from('step_templates').select('*').order('position');
+    if(tErr) throw tErr;
+    if(tData&&tData.length>0){
+      const outRows=tData.filter(r=>r.path==='outreach');
+      const inRows=tData.filter(r=>r.path==='intake');
+      if(outRows.length>0) OUTREACH=outRows.map(r=>({t:r.label,offset:r.offset_type?{type:r.offset_type,n:r.offset_n}:{type:'start'}}));
+      if(inRows.length>0) INTAKE=inRows.map(r=>({t:r.label}));
+    }
+
+    // weekly
+    const {data:wData,error:wErr}=await sb.from('weekly_report').select('*');
+    if(wErr) throw wErr;
+    weekly=(wData||[]).map(r=>[r.week_ending,r.contacts_logged,r.notes||'']);
+
+    cacheWrite();
+    syncDone();
+    renderAll();
+  }catch(e){
+    syncErr('Load failed — using local cache');
+  }
+}
+
+// ---- SAVE a case to Supabase ----
+async function saveCase(c){
+  syncStart();
+  try{
+    const {error}=await sb.from('cases').upsert({
+      id:c.id, assigned:c.assigned, status:c.status, step:c.step,
+      started:c.started, closed:c.closed||null, intake_start:c.intakeStart||null,
+      opened_at:c.openedAt||null, custom_steps:c.customSteps||null
+    },{onConflict:'id'});
+    if(error) throw error;
+    // roster name
+    if(roster[c.id]){
+      const {error:re}=await sb.from('roster').upsert({case_id:c.id,name:roster[c.id]},{onConflict:'case_id'});
+      if(re) throw re;
+    }
+    cacheWrite();
+    syncDone();
+  }catch(e){ syncErr('Save failed'); cacheWrite(); }
+}
+
+// ---- DELETE a case from Supabase ----
+async function deleteCase(id){
+  syncStart();
+  try{
+    const {error}=await sb.from('cases').delete().eq('id',id);
+    if(error) throw error;
+    cacheWrite();
+    syncDone();
+  }catch(e){ syncErr('Delete failed'); cacheWrite(); }
+}
+
+// ---- SAVE a contact log ----
+async function saveLogEntry(entry){
+  syncStart();
+  try{
+    const {data,error}=await sb.from('contact_logs').insert({
+      case_id:entry.id, method:entry.method, date:entry.date,
+      time:entry.time||null, result:entry.result, notes:entry.notes||null
+    }).select().single();
+    if(error) throw error;
+    entry._dbId=data.id;
+    cacheWrite();
+    syncDone();
+  }catch(e){ syncErr('Log save failed'); cacheWrite(); }
+}
+
+// ---- SAVE step templates ----
+async function saveTemplates(){
   localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
   localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
+  syncStart();
+  try{
+    // delete existing and re-insert
+    await sb.from('step_templates').delete().neq('id','00000000-0000-0000-0000-000000000000');
+    const rows=[
+      ...OUTREACH.map((s,i)=>({path:'outreach',position:i,label:s.t,offset_type:s.offset?s.offset.type:null,offset_n:s.offset?.n||null})),
+      ...INTAKE.map((s,i)=>({path:'intake',position:i,label:s.t,offset_type:null,offset_n:null}))
+    ];
+    const {error}=await sb.from('step_templates').insert(rows);
+    if(error) throw error;
+    syncDone();
+  }catch(e){ syncErr('Template save failed'); }
+}
+
+// ---- SAVE roster name ----
+async function saveRosterName(id,name){
+  try{
+    if(name){
+      await sb.from('roster').upsert({case_id:id,name},{onConflict:'case_id'});
+    } else {
+      await sb.from('roster').delete().eq('case_id',id);
+    }
+    cacheWrite();
+  }catch(e){ console.error('roster save failed',e); cacheWrite(); }
+}
+
+// ---- AUDIT save to Supabase ----
+async function saveAuditEntry(clientId, entry){
+  try{
+    const {error}=await sb.from('audit_entries').insert({
+      case_id:parseInt(clientId),
+      checked:entry.checked,
+      done:entry.done,
+      total:entry.total,
+      saved_at:entry.savedAt
+    });
+    if(error) throw error;
+  }catch(e){ console.error('audit save failed',e); }
+}
+
+// ---- legacy save() wrapper (keeps existing call sites working) ----
+function save(){
+  cacheWrite();
+  // fire-and-forget bulk sync for any case that changed
+  // (fine for single-user; full sync handled by individual saveCase calls)
 }
 function stepsFor(c){
   const path=c.status==='intake'?'intake':'outreach';
@@ -749,15 +908,14 @@ function renderDash(){
     const dd=dueDateFor(c,c.step);
     const du=daysUntil(dd);
     let cls='ok',chip='green',chiptxt='Due '+fmt(dd);
-    let urgencyIcon='';
-    if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;urgencyIcon='<span style="color:var(--red);font-size:13px;margin-right:4px" title="Overdue">⚠</span>';}
-    else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';urgencyIcon='<span style="color:var(--red);font-size:13px;margin-right:4px" title="Due today">⚠</span>';}
-    else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';urgencyIcon='<span style="color:var(--amber);font-size:13px;margin-right:4px" title="Due tomorrow">!</span>';}
+    if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;}
+    else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';}
+    else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';}
     else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
     const steps=stepsFor(c);const total=steps.length;
     return `<div class="case-card ${cls}">
       <div class="case-head">
-        <div><span class="case-id">${urgencyIcon}#${c.id}<span class="tag outreach">Outreach</span></span>
+        <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
@@ -784,51 +942,55 @@ function startCase(){
   if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'))){alert('That ID already has an active case.');return;}
   const name=document.getElementById('newName').value.trim();
   if(name)roster[id]=name;
-  cases.push({id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()});
-  closeModal('startModal');save();renderAll();
+  const newCase={id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()};
+  cases.push(newCase);
+  closeModal('startModal');
+  saveCase(newCase);
+  renderAll();
 }
 function nextStep(id){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
   const arr=stepsFor(c);
   if(c.step<arr.length-1){c.step++;}
   else if(c.status==='intake'){c.status='open';c.openedAt=todayISO();}
-  save();renderAll();
+  saveCase(c);renderAll();
 }
 function markOpen(id){
   const c=cases.find(c=>c.id===id&&c.status==='intake');if(!c)return;
   if(!confirm('Skip remaining intake steps and mark as Open Case?'))return;
-  c.status='open';c.openedAt=todayISO();save();renderAll();
+  c.status='open';c.openedAt=todayISO();saveCase(c);renderAll();
 }
 function closeOpenCase(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
   if(!confirm('Close this open case as resolved?'))return;
-  c.status='completed';c.closed=todayISO();save();renderAll();
+  c.status='completed';c.closed=todayISO();saveCase(c);renderAll();
 }
 function reopenIntake(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
-  c.status='intake';c.step=(c.customSteps&&c.customSteps.intake?c.customSteps.intake:INTAKE).length-1;save();renderAll();
+  c.status='intake';c.step=(c.customSteps&&c.customSteps.intake?c.customSteps.intake:INTAKE).length-1;saveCase(c);renderAll();
 }
 function reopenOutreach(id){
   const c=cases.find(c=>c.id===id&&c.status==='intake');if(!c)return;
-  c.status='outreach';c.step=0;save();renderAll();
+  c.status='outreach';c.step=0;saveCase(c);renderAll();
 }
-function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;save();renderAll();}}
+function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;saveCase(c);renderAll();}}
 function closeIntakeCase(id){
   if(!confirm(`Close case #${id} from intake? This will mark it as closed.`))return;
   const c=cases.find(c=>c.id===id);if(!c)return;
-  c.status='closed';c.closed=todayISO();save();renderAll();
+  c.status='closed';c.closed=todayISO();saveCase(c);renderAll();
 }
 function closeCase(id,status){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
   if(!confirm(status==='declined'?'Close case as DECLINED in TCR?':'Close this case (no contact made)?'))return;
-  c.status=status;c.closed=todayISO();save();renderAll();
+  c.status=status;c.closed=todayISO();saveCase(c);renderAll();
 }
 function deleteClient(id){
   if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), and the name. This cannot be undone.`))return;
   cases=cases.filter(c=>c.id!==id);
   logs=logs.filter(l=>l.id!==id);
   delete roster[id];
-  save();renderAll();
+  deleteCase(id);
+  renderAll();
 }
 let decideId=null;
 function openDecide(id){decideId=id;show('decideModal')}
@@ -836,7 +998,7 @@ function decide(kind){
   const c=cases.find(c=>c.id===decideId);if(!c){closeModal('decideModal');return;}
   if(kind==='accept'){c.status='intake';c.step=0;c.intakeStart=todayISO();}
   else{c.status='declined';c.closed=todayISO();}
-  closeModal('decideModal');save();renderAll();
+  closeModal('decideModal');saveCase(c);renderAll();
 }
 
 /* ---------- LOG CONTACT ---------- */
@@ -853,10 +1015,13 @@ function saveLog(){
   const method=document.querySelector('input[name=method]:checked').value;
   const notes=document.getElementById('logNotes').value.trim();
   const time=document.getElementById('logTime').value||'';
-  logs.push({id,method,date:document.getElementById('logDate').value||todayISO(),time,result:document.getElementById('logResult').value,notes});
+  const entry={id,method,date:document.getElementById('logDate').value||todayISO(),time,result:document.getElementById('logResult').value,notes};
+  logs.push(entry);
   document.getElementById('logNotes').value='';
   document.getElementById('logResult').selectedIndex=0;
-  closeModal('logModal');save();renderAll();
+  closeModal('logModal');
+  saveLogEntry(entry);
+  renderAll();
   if(activeRosterId===id) openClientProfile(id,true);
 }
 
@@ -884,7 +1049,10 @@ function renderRoster(){
   if(activeRosterId) openClientProfile(activeRosterId,true);
 }
 
-function setName(id,v){if(v.trim())roster[id]=v.trim();else delete roster[id];save();}
+function setName(id,v){
+  if(v.trim()) roster[id]=v.trim(); else delete roster[id];
+  saveRosterName(id, v.trim()||null);
+}
 
 function openClientProfile(id, silent=false){
   activeRosterId=id;
@@ -1487,6 +1655,7 @@ function auditSave(){
   if(auditSavedIndex!==null&&list[auditSavedIndex]){list[auditSavedIndex]=entry;}
   else{list.push(entry);auditSavedIndex=list.length-1;}
   auditSaveList(auditClientId,list);
+  saveAuditEntry(auditClientId, entry);
   auditRender();
   const fl=document.getElementById('auditSaveFlash');
   if(fl){fl.classList.add('show');setTimeout(()=>fl.classList.remove('show'),2000);}
@@ -1611,11 +1780,10 @@ async function importBackup(input){
 }
 
 /* ---------- INIT ---------- */
-(function(){
+(async function(){
   document.getElementById('todayDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  load();
   renderSteps();
-  renderAll();
+  await load();
 })();
 </script>
 </body>
