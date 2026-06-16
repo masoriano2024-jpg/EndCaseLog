@@ -667,14 +667,16 @@ async function saveTemplates(){
   localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
   syncStart();
   try{
-    // delete existing and re-insert
-    await sb.from('step_templates').delete().neq('id','00000000-0000-0000-0000-000000000000');
+    // delete ALL existing template rows first
+    const {error:delErr}=await sb.from('step_templates').delete().gte('position',0);
+    if(delErr) throw delErr;
+    // then insert the current set
     const rows=[
       ...OUTREACH.map((s,i)=>({path:'outreach',position:i,label:s.t,offset_type:s.offset?s.offset.type:null,offset_n:s.offset?.n||null})),
       ...INTAKE.map((s,i)=>({path:'intake',position:i,label:s.t,offset_type:null,offset_n:null}))
     ];
-    const {error}=await sb.from('step_templates').insert(rows);
-    if(error) throw error;
+    const {error:insErr}=await sb.from('step_templates').insert(rows);
+    if(insErr) throw insErr;
     syncDone();
   }catch(e){ syncErr('Template save failed'); }
 }
