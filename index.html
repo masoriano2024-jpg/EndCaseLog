@@ -33,8 +33,8 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{
     font-family:'Open Sans',system-ui,sans-serif;
-    background:var(--blue-bg);
-    background-image:linear-gradient(160deg,#f0f7fd 0%,#e8f2fa 100%);
+    background:#c8dcea;
+    background-image:linear-gradient(160deg,#c8dcea 0%,#b8cfdf 100%);
     color:var(--ink);
     min-height:100vh;
     line-height:1.55;
@@ -55,15 +55,16 @@
   .today{font-size:12px;text-align:right;color:#b0c8d8;padding:14px 0;font-weight:500;letter-spacing:.3px}
   .today b{display:block;font-family:'Montserrat',sans-serif;font-size:16px;color:var(--white);font-weight:700;margin-top:2px}
 
-  nav.tabs{display:flex;gap:0;background:var(--navy);padding:0 28px;border-bottom:1px solid rgba(255,255,255,.08)}
+  nav.tabs{display:flex;gap:0;background:var(--navy);padding:0;border-bottom:1px solid rgba(255,255,255,.08)}
   nav.tabs button{
     font-family:'Montserrat',sans-serif;font-size:12px;font-weight:600;
     background:none;border:none;border-bottom:3px solid transparent;
-    padding:14px 18px;cursor:pointer;color:rgba(255,255,255,.5);
+    padding:14px 0;cursor:pointer;color:rgba(255,255,255,.5);
     letter-spacing:.6px;text-transform:uppercase;transition:color .15s,border-color .15s;
+    flex:1;text-align:center;
   }
-  nav.tabs button.active{color:var(--white);border-bottom-color:var(--blue)}
-  nav.tabs button:hover{color:rgba(255,255,255,.85)}
+  nav.tabs button.active{color:var(--white);border-bottom-color:var(--blue-bright)}
+  nav.tabs button:hover{color:rgba(255,255,255,.85);background:rgba(255,255,255,.05)}
 
   main{max-width:1040px;margin:0 auto;padding:28px 24px}
   .panel{display:none}
@@ -104,16 +105,16 @@
   .alert-bar .count{background:var(--blue);padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700}
 
   .case-card{
-    background:var(--white);border:1px solid var(--line);border-left:5px solid var(--line);
-    border-radius:8px;padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow-card);
+    background:var(--white);border:1px solid var(--line);border-left:6px solid var(--line);
+    border-radius:8px;padding:16px 18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,60,120,.12),0 6px 20px rgba(0,60,120,.08);
     transition:box-shadow .15s;
   }
-  .case-card:hover{box-shadow:0 4px 20px rgba(0,80,160,.13)}
-  .case-card.due{border-left-color:var(--red)}
-  .case-card.soon{border-left-color:var(--amber)}
-  .case-card.ok{border-left-color:var(--green)}
-  .case-card.intake{border-left-color:var(--blue)}
-  .case-card.open{border-left-color:var(--green);background:#f8fffe}
+  .case-card:hover{box-shadow:0 4px 20px rgba(0,80,160,.18)}
+  .case-card.due{border-left-color:var(--red);background:linear-gradient(to right,#fff5f5 0%,var(--white) 60%)}
+  .case-card.soon{border-left-color:var(--amber);background:linear-gradient(to right,#fffbf0 0%,var(--white) 60%)}
+  .case-card.ok{border-left-color:var(--green);background:linear-gradient(to right,#f3fbf7 0%,var(--white) 60%)}
+  .case-card.intake{border-left-color:var(--blue);background:linear-gradient(to right,#f0f7fd 0%,var(--white) 60%)}
+  .case-card.open{border-left-color:var(--green);background:linear-gradient(to right,#e8f8f0 0%,#f8fffe 60%)}
   .case-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
   .case-id{font-family:'Montserrat',sans-serif;font-weight:700;font-size:17px;color:var(--navy)}
   .case-id .tag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:8px;letter-spacing:.5px;text-transform:uppercase;vertical-align:middle}
