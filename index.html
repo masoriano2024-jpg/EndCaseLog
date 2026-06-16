@@ -315,7 +315,7 @@
   <button data-tab="weekly">Weekly Report</button>
   <button data-tab="steps">The Steps</button>
   <button data-tab="audit">Self-Audit</button>
-  <button data-tab="datatools">💾 Data</button>
+  <button data-tab="notes">Notes</button>
 </nav>
 
 <main>
@@ -386,37 +386,44 @@
     <div id="auditApp"><div class="audit-no-case">Enter a Client ID above to load the compliance checklist.</div></div>
   </section>
 
-  <!-- DATA TOOLS -->
-  <section class="panel" id="datatools">
-    <h2 class="sec">Data Backup &amp; Restore</h2>
-    <p class="sec-note">Export a full backup of all your cases, contact logs, and roster to a file you save on your computer or cloud drive. Import it anytime to restore everything — on this machine or a new one.</p>
 
-    <div style="display:grid;gap:20px;max-width:560px;margin-top:8px">
+  <!-- NOTES TAB -->
+  <section class="panel" id="notes">
+    <h2 class="sec">Notes</h2>
 
-      <!-- EXPORT CARD -->
-      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:var(--shadow-card)">
-        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px">⬇ Export Full Backup</div>
-        <p style="font-size:13px;color:var(--gray);margin-bottom:16px;line-height:1.6">Downloads a <code style="background:var(--blue-pale);padding:1px 5px;border-radius:3px">.json</code> file with every case, every contact log, your roster, and your weekly report data. Save it to Google Drive, a USB drive, or your desktop. This is your safety net.</p>
-        <button class="btn green" onclick="exportBackup()">⬇ Download Backup Now</button>
-        <div id="exportMsg" style="margin-top:10px;font-size:12px;color:var(--green);font-weight:600;display:none"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+      <!-- TO-DO LIST -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+        <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
+          ✅ To-Do List
+        </div>
+        <div style="padding:16px">
+          <div style="display:flex;gap:8px;margin-bottom:14px">
+            <input type="text" id="todoInput" placeholder="Add a task…" style="flex:1;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif" onkeydown="if(event.key==='Enter')addTodo()">
+            <button class="btn gold" style="white-space:nowrap" onclick="addTodo()">+ Add</button>
+          </div>
+          <div id="todoList" style="display:flex;flex-direction:column;gap:6px;min-height:40px">
+            <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>
+          </div>
+        </div>
       </div>
 
-      <!-- IMPORT CARD -->
-      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:var(--shadow-card)">
-        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px">⬆ Restore from Backup</div>
-        <p style="font-size:13px;color:var(--gray);margin-bottom:4px;line-height:1.6">Select a backup file you exported previously. <strong style="color:var(--red)">This will replace all current data.</strong> Only use this after a machine wipe or when starting fresh on a new device.</p>
-        <p style="font-size:12px;color:var(--gray-light);margin-bottom:16px">Audit data is stored separately per client and will be restored automatically.</p>
-        <label for="importFile" style="display:inline-block;cursor:pointer">
-          <span class="btn gold" style="display:inline-block">⬆ Choose Backup File</span>
-          <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
-        </label>
-        <div id="importMsg" style="margin-top:10px;font-size:12px;font-weight:600;display:none"></div>
-      </div>
-
-      <!-- STATUS CARD -->
-      <div style="background:var(--blue-bg);border:1px solid var(--line);border-radius:10px;padding:20px;box-shadow:var(--shadow-card)">
-        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Current Data Summary</div>
-        <div id="dataSummary" style="font-size:13px;color:var(--gray);line-height:2"></div>
+      <!-- CASE NOTES -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+        <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
+          📋 Case Notes
+        </div>
+        <div style="padding:16px">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input type="number" id="notesCaseId" placeholder="Survivor ID" style="width:120px;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <textarea id="noteInput" placeholder="Write a case note…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif;min-height:80px;resize:vertical;margin-bottom:8px"></textarea>
+          <button class="btn gold" style="width:100%" onclick="addCaseNote()">+ Save Note</button>
+          <div id="caseNotesLog" style="margin-top:16px;display:flex;flex-direction:column;gap:10px;min-height:40px">
+            <div style="font-size:13px;color:var(--gray-light);font-style:italic">Enter a Survivor ID to see notes.</div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -1054,7 +1061,7 @@ function setName(id,v){
   saveRosterName(id, v.trim()||null);
 }
 
-function openClientProfile(id, silent=false){
+async function openClientProfile(id, silent=false){
   activeRosterId=id;
   if(!silent) renderRoster();
   const el=document.getElementById('clientProfile');
@@ -1149,7 +1156,16 @@ function openClientProfile(id, silent=false){
         ${auditList.length>0?`<button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=audit]').click();document.getElementById('auditClientInput').value='${id}';auditLoad()">Open in Audit Tab →</button>`:''}
       </div>
 
+      <!-- CASE NOTES -->
+      <div style="padding:16px 20px;border-top:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Notes</div>
+        <div id="rosterNotes_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
+        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes(${id})">Add / View All Notes →</button>
+      </div>
+
     </div>`;
+  // load case notes async after profile renders
+  renderRosterCaseNotes(id);
 }
 
 /* ---------- WEEKLY REPORT ---------- */
@@ -1386,7 +1402,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('show'));
   b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('show');
-  if(b.dataset.tab==='datatools')renderDataSummary();
+  if(b.dataset.tab==='notes')renderNotesTab();
   if(b.dataset.tab==='weekly')renderWeekly();
 });
 document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show')});
@@ -1524,13 +1540,16 @@ function auditStorageKey(id){return 'auditlist_'+id;}
 function auditLoadList(id){try{return JSON.parse(localStorage.getItem(auditStorageKey(id)))||[];}catch{return[];}}
 function auditSaveList(id,list){localStorage.setItem(auditStorageKey(id),JSON.stringify(list));}
 
-function auditLoad(){
+async function auditLoad(){
   const raw=document.getElementById('auditClientInput').value.trim();
   if(!raw){alert('Enter a Client ID first.');return;}
   auditClientId=raw;
-  const list=auditLoadList(auditClientId);
-  if(list.length>0){
-    // resume from the most recent audit automatically
+  // try Supabase first, fall back to localStorage
+  let list = await auditLoadFromSupabase(auditClientId);
+  if(!list || list.length===0) list=auditLoadList(auditClientId);
+  if(list&&list.length>0){
+    // save to localStorage cache
+    auditSaveList(auditClientId, list);
     const last=list[list.length-1];
     auditChecked=last.checked?{...last.checked}:{};
     auditSavedIndex=list.length-1;
@@ -1676,107 +1695,182 @@ function auditDeleteEntry(idx){
   auditRender();
 }
 
-/* ---------- DATA BACKUP / RESTORE ---------- */
-function renderDataSummary(){
-  const el=document.getElementById('dataSummary');
-  if(!el)return;
-  const activeCases=cases.filter(c=>['outreach','intake','open'].includes(c.status)).length;
-  const closedCases=cases.filter(c=>!['outreach','intake','open'].includes(c.status)).length;
-  const rosterCount=Object.keys(roster).length;
-  // count audit entries across all clients
-  let auditCount=0;
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith('auditlist_')){
-      try{const list=JSON.parse(localStorage.getItem(k));auditCount+=list.length;}catch{}
-    }
-  }
-  el.innerHTML=`
-    <div>📋 <b>${activeCases}</b> active case${activeCases!==1?'s':''} &nbsp;·&nbsp; <b>${closedCases}</b> closed</div>
-    <div>📞 <b>${logs.length}</b> contact log${logs.length!==1?'s':''}</div>
-    <div>👤 <b>${rosterCount}</b> roster name${rosterCount!==1?'s':''}</div>
-    <div>✅ <b>${auditCount}</b> saved audit entr${auditCount!==1?'ies':'y'}</div>
-    <div>📅 <b>${weekly.length}</b> weekly report row${weekly.length!==1?'s':''}</div>
-  `;
+
+/* ---------- NOTES & TO-DOS ---------- */
+let todos = [];
+let caseNotes = []; // all notes loaded for current case
+let notesCaseIdLoaded = null;
+
+// ---- Supabase helpers ----
+async function loadTodos(){
+  try{
+    const {data,error}=await sb.from('todos').select('*').order('created_at',{ascending:true});
+    if(error) throw error;
+    todos=(data||[]);
+  }catch(e){ console.error('todos load failed',e); }
+}
+async function addTodo(){
+  const input=document.getElementById('todoInput');
+  const text=input.value.trim();
+  if(!text) return;
+  input.value='';
+  try{
+    const {data,error}=await sb.from('todos').insert({text,done:false}).select().single();
+    if(error) throw error;
+    todos.push(data);
+    renderTodos();
+  }catch(e){ console.error('add todo failed',e); }
+}
+async function toggleTodo(id){
+  const t=todos.find(x=>x.id===id);
+  if(!t) return;
+  t.done=!t.done;
+  renderTodos();
+  try{
+    await sb.from('todos').update({done:t.done}).eq('id',id);
+  }catch(e){ console.error('toggle todo failed',e); t.done=!t.done; renderTodos(); }
+}
+async function deleteTodo(id){
+  todos=todos.filter(x=>x.id!==id);
+  renderTodos();
+  try{
+    await sb.from('todos').delete().eq('id',id);
+  }catch(e){ console.error('delete todo failed',e); }
 }
 
-async function exportBackup(){
-  // gather all audit data from localStorage
-  const auditData={};
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith('auditlist_')){
-      try{auditData[k]=JSON.parse(localStorage.getItem(k));}catch{}
-    }
+function renderTodos(){
+  const el=document.getElementById('todoList');
+  if(!el) return;
+  if(todos.length===0){
+    el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">No tasks yet.</div>';
+    return;
   }
-  const backup={
-    version:1,
-    exportedAt:new Date().toISOString(),
-    cases,logs,weekly,roster,auditData
-  };
-  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='case-tracker-backup-'+todayISO()+'.json';
-  a.click();
-  const msg=document.getElementById('exportMsg');
-  if(msg){
-    msg.textContent='✓ Backup downloaded — '+cases.length+' case(s), '+logs.length+' log(s) saved.';
-    msg.style.display='block';
-    setTimeout(()=>{msg.style.display='none';},4000);
-  }
+  const open=todos.filter(t=>!t.done);
+  const done=todos.filter(t=>t.done);
+  const row=(t)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:${t.done?'#f9fafb':'var(--white)'};border:1px solid var(--line);border-radius:7px">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo('${t.id}')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--navy)">
+      <span style="flex:1;font-size:13px;color:${t.done?'var(--gray-light)':'var(--navy)'};${t.done?'text-decoration:line-through':''}">${esc(t.text)}</span>
+      <button onclick="deleteTodo('${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--gray-light);font-size:15px;padding:0 2px" title="Delete">×</button>
+    </div>`;
+  el.innerHTML=[...open,...done].map(row).join('');
 }
 
-async function importBackup(input){
-  const file=input.files[0];
-  if(!file)return;
-  const msg=document.getElementById('importMsg');
-  const reader=new FileReader();
-  reader.onload=async function(e){
-    try{
-      const backup=JSON.parse(e.target.result);
-      if(!backup.version||!backup.cases){
-        throw new Error('This does not look like a valid backup file.');
-      }
-      const confirmMsg=`Restore backup from ${new Date(backup.exportedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}?\n\n`+
-        `This will replace your current data with:\n`+
-        `• ${backup.cases.length} case(s)\n`+
-        `• ${backup.logs.length} contact log(s)\n`+
-        `• ${Object.keys(backup.roster||{}).length} roster name(s)\n\n`+
-        `Current data will be overwritten. Continue?`;
-      if(!confirm(confirmMsg)){input.value='';return;}
+async function loadCaseNotes(caseId){
+  try{
+    const {data,error}=await sb.from('case_notes').select('*').eq('case_id',caseId).order('created_at',{ascending:false});
+    if(error) throw error;
+    caseNotes=(data||[]);
+    notesCaseIdLoaded=caseId;
+  }catch(e){ console.error('case notes load failed',e); caseNotes=[]; }
+}
+async function addCaseNote(){
+  const idVal=parseInt(document.getElementById('notesCaseId').value);
+  const text=document.getElementById('noteInput').value.trim();
+  if(!idVal){ alert('Enter a Survivor ID.'); return; }
+  if(!text){ alert('Write a note first.'); return; }
+  document.getElementById('noteInput').value='';
+  try{
+    const {data,error}=await sb.from('case_notes').insert({case_id:idVal,note:text}).select().single();
+    if(error) throw error;
+    if(notesCaseIdLoaded===idVal){ caseNotes.unshift(data); renderCaseNotesLog(); }
+    else { await loadAndRenderCaseNotes(idVal); }
+  }catch(e){ console.error('add case note failed',e); }
+}
+async function loadAndRenderCaseNotes(caseId){
+  await loadCaseNotes(caseId);
+  renderCaseNotesLog();
+}
+async function deleteCaseNote(id){
+  caseNotes=caseNotes.filter(n=>n.id!==id);
+  renderCaseNotesLog();
+  try{ await sb.from('case_notes').delete().eq('id',id); }
+  catch(e){ console.error('delete case note failed',e); }
+}
+function renderCaseNotesLog(){
+  const el=document.getElementById('caseNotesLog');
+  if(!el) return;
+  if(caseNotes.length===0){
+    el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">No notes yet for this case.</div>';
+    return;
+  }
+  el.innerHTML=caseNotes.map(n=>{
+    const d=new Date(n.created_at);
+    const dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const timeStr=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    return `<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="background:var(--blue-bg);padding:6px 12px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy)">${dateStr} · ${timeStr}</span>
+        <button onclick="deleteCaseNote('${n.id}')" style="background:none;border:none;cursor:pointer;color:var(--gray-light);font-size:15px;padding:0 4px" title="Delete">×</button>
+      </div>
+      <div style="padding:10px 12px;font-size:13px;color:var(--gray);line-height:1.6;white-space:pre-wrap">${esc(n.note)}</div>
+    </div>`;
+  }).join('');
+}
 
-      // restore main data
-      cases=backup.cases||[];
-      logs=backup.logs||[];
-      weekly=backup.weekly||[];
-      roster=backup.roster||{};
-      save();
+// watch case ID input on notes tab
+function initNotesCaseIdWatcher(){
+  const input=document.getElementById('notesCaseId');
+  if(!input) return;
+  let debounce=null;
+  input.addEventListener('input',()=>{
+    clearTimeout(debounce);
+    debounce=setTimeout(async()=>{
+      const id=parseInt(input.value);
+      if(id&&id>0){ await loadAndRenderCaseNotes(id); }
+      else{ caseNotes=[]; notesCaseIdLoaded=null; renderCaseNotesLog(); }
+    },600);
+  });
+}
 
-      // restore audit data to localStorage
-      if(backup.auditData){
-        Object.entries(backup.auditData).forEach(([k,v])=>{
-          localStorage.setItem(k,JSON.stringify(v));
-        });
-      }
+async function renderNotesTab(){
+  await loadTodos();
+  renderTodos();
+  initNotesCaseIdWatcher();
+  // reset case notes view
+  const el=document.getElementById('caseNotesLog');
+  if(el) el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">Enter a Survivor ID to see notes.</div>';
+}
 
-      renderAll();
-      renderDataSummary();
-      if(msg){
-        msg.style.color='var(--green)';
-        msg.textContent='✓ Restore complete — '+cases.length+' case(s) and '+logs.length+' log(s) loaded.';
-        msg.style.display='block';
-      }
-    }catch(err){
-      if(msg){
-        msg.style.color='var(--red)';
-        msg.textContent='✗ Error: '+err.message;
-        msg.style.display='block';
-      }
+// ---- Case notes mini-panel in Roster profile ----
+async function renderRosterCaseNotes(caseId){
+  const el=document.getElementById(`rosterNotes_${caseId}`);
+  if(!el) return;
+  el.innerHTML='<div style="font-size:12px;color:var(--gray-light)">Loading…</div>';
+  try{
+    const {data,error}=await sb.from('case_notes').select('*').eq('case_id',caseId).order('created_at',{ascending:false}).limit(5);
+    if(error) throw error;
+    if(!data||data.length===0){
+      el.innerHTML='<div style="font-size:12px;color:var(--gray-light);font-style:italic">No case notes yet.</div>';
+      return;
     }
-    input.value='';
-  };
-  reader.readAsText(file);
+    el.innerHTML=data.map(n=>{
+      const d=new Date(n.created_at);
+      const dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      return `<div style="border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:6px;background:var(--blue-bg);border-radius:0 6px 6px 0">
+        <div style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--blue);margin-bottom:2px">${dateStr}</div>
+        <div style="font-size:12px;color:var(--gray);line-height:1.5;white-space:pre-wrap">${esc(n.note)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div style="font-size:12px;color:var(--red)">Failed to load notes.</div>'; }
+}
+
+/* ---------- AUDIT LOAD FROM SUPABASE ---------- */
+async function auditLoadFromSupabase(clientId){
+  try{
+    const {data,error}=await sb.from('audit_entries').select('*').eq('case_id',parseInt(clientId)).order('saved_at',{ascending:true});
+    if(error) throw error;
+    if(!data||data.length===0) return null;
+    // convert to the format auditLoadList expects
+    return data.map(r=>({
+      savedAt:r.saved_at,
+      date:new Date(r.saved_at).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
+      time:new Date(r.saved_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
+      checked:r.checked||{},
+      done:r.done,
+      total:r.total
+    }));
+  }catch(e){ console.error('audit load from supabase failed',e); return null; }
 }
 
 /* ---------- INIT ---------- */
