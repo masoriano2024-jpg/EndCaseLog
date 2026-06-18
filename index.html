@@ -423,12 +423,12 @@
   <section class="panel" id="notes">
     <h2 class="sec">Notes</h2>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin-bottom:20px">
 
       <!-- TO-DO LIST -->
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
         <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
-          ✅ To-Do List
+          ✅ My To-Do List
         </div>
         <div style="padding:16px">
           <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -458,6 +458,33 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- CLIENT TO-DOS (full width below) -->
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+      <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
+        📌 Client To-Do List
+      </div>
+      <div style="padding:16px">
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Survivor ID</label>
+            <input type="number" id="clientTodoId" placeholder="e.g. 25983" style="width:130px;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Task</label>
+            <input type="text" id="clientTodoText" placeholder="e.g. Submit contractor estimate" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif" onkeydown="if(event.key==='Enter')addClientTodo()">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Due Date</label>
+            <input type="date" id="clientTodoDue" style="padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <button class="btn gold" style="white-space:nowrap;align-self:flex-end" onclick="addClientTodo()">+ Add Task</button>
+        </div>
+        <div id="clientTodoList" style="display:flex;flex-direction:column;gap:8px;min-height:40px">
+          <div style="font-size:13px;color:var(--gray-light);font-style:italic">Enter a Survivor ID to see their tasks.</div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -987,7 +1014,7 @@ function dueDateFor(c,stepIdx){
 function daysUntil(iso){const a=new Date(todayISO()+'T00:00:00'),b=new Date(iso+'T00:00:00');return Math.round((b-a)/86400000)}
 
 /* ---------- DAILY BRIEFING ---------- */
-function renderBriefing(){
+async function renderBriefing(){
   const el=document.getElementById('dailyBriefing');
   if(!el)return;
   const today=todayISO();
@@ -1049,6 +1076,49 @@ function renderBriefing(){
 
   const totalDue=overdue.length+dueToday.length;
 
+  // load client task alerts async
+  let taskAlertsHtml='';
+  try{
+    const {data:taskData}=await sb.from('client_todos')
+      .select('*')
+      .eq('done',false)
+      .eq('user_id',currentUser.id)
+      .lte('due_date',addDays(today,1))
+      .order('due_date',{ascending:true});
+
+    if(taskData&&taskData.length>0){
+      const overdueT=taskData.filter(t=>t.due_date<today);
+      const dueTodayT=taskData.filter(t=>t.due_date===today);
+      const dueTmrw=taskData.filter(t=>t.due_date===addDays(today,1));
+
+      if(overdueT.length>0){
+        taskAlertsHtml+=overdueT.map(t=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fff0f0;border-radius:6px;margin-bottom:6px">
+            <span style="font-size:15px">📌</span>
+            <span style="font-size:13px;font-weight:700;color:var(--red)">Overdue task · #${t.case_id}</span>
+            <span style="font-size:13px;color:var(--red);flex:1">${esc(t.text)}</span>
+            <span style="font-size:11px;color:var(--red);white-space:nowrap">${new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          </div>`).join('');
+      }
+      if(dueTodayT.length>0){
+        taskAlertsHtml+=dueTodayT.map(t=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fffbea;border-radius:6px;margin-bottom:6px">
+            <span style="font-size:15px">📌</span>
+            <span style="font-size:13px;font-weight:700;color:var(--amber)">Due today · #${t.case_id}</span>
+            <span style="font-size:13px;color:var(--amber);flex:1">${esc(t.text)}</span>
+          </div>`).join('');
+      }
+      if(dueTmrw.length>0){
+        taskAlertsHtml+=dueTmrw.map(t=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--blue-bg);border-radius:6px;margin-bottom:6px">
+            <span style="font-size:15px">📌</span>
+            <span style="font-size:13px;font-weight:600;color:var(--navy)">Due tomorrow · #${t.case_id}</span>
+            <span style="font-size:13px;color:var(--gray);flex:1">${esc(t.text)}</span>
+          </div>`).join('');
+      }
+    }
+  }catch(e){ console.error('task alerts load failed',e); }
+
   el.innerHTML=`
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
 
@@ -1072,6 +1142,13 @@ function renderBriefing(){
 
       <!-- URGENCY ALERTS -->
       ${urgencyHtml||overdue.length===0&&dueToday.length===0?`<div style="padding:12px 16px">${urgencyHtml||'<span style="font-size:13px;color:var(--green);font-weight:600">✓ No overdue or due-today items.</span>'}</div>`:'<div style="padding:12px 16px">'+urgencyHtml+'</div>'}
+
+      <!-- CLIENT TASK ALERTS -->
+      ${taskAlertsHtml?`
+      <div style="padding:12px 16px;border-top:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">📌 Client Tasks Due</div>
+        ${taskAlertsHtml}
+      </div>`:''}
 
       <!-- STEP BREAKDOWN -->
       ${outreachCases.length>0?`
@@ -1417,9 +1494,17 @@ async function openClientProfile(id, silent=false){
         <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes(${id})">Add / View All Notes →</button>
       </div>
 
+      <!-- CLIENT TO-DOS -->
+      <div style="padding:16px 20px;border-top:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Open Tasks</div>
+        <div id="rosterClientTodos_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
+        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('clientTodoId').value='${id}';loadAndRenderClientTodos(${id})">Add / View All Tasks →</button>
+      </div>
+
     </div>`;
-  // load case notes async after profile renders
+  // load case notes and client todos async after profile renders
   renderRosterCaseNotes(id);
+  renderRosterClientTodos(id);
 }
 
 /* ---------- WEEKLY REPORT ---------- */
@@ -2063,6 +2148,172 @@ function renderCaseNotesLog(){
   }).join('');
 }
 
+// watch case ID input on client todos
+function initClientTodoIdWatcher(){
+  const input=document.getElementById('clientTodoId');
+  if(!input||input._watched) return;
+  input._watched=true;
+  let debounce=null;
+  input.addEventListener('input',()=>{
+    clearTimeout(debounce);
+    debounce=setTimeout(async()=>{
+      const id=parseInt(input.value);
+      if(id&&id>0) await loadAndRenderClientTodos(id);
+      else{
+        const el=document.getElementById('clientTodoList');
+        if(el) el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">Enter a Survivor ID to see their tasks.</div>';
+      }
+    },600);
+  });
+}
+
+let clientTodosLoaded = null;
+let clientTodosData = [];
+
+async function loadAndRenderClientTodos(caseId){
+  clientTodosLoaded=caseId;
+  const el=document.getElementById('clientTodoList');
+  if(el) el.innerHTML='<div style="font-size:13px;color:var(--gray-light)">Loading…</div>';
+  try{
+    const {data,error}=await sb.from('client_todos').select('*').eq('case_id',caseId).order('due_date',{ascending:true,nullsFirst:false});
+    if(error) throw error;
+    clientTodosData=data||[];
+    renderClientTodoList();
+  }catch(e){ console.error('client todos load failed',e); }
+}
+
+function renderClientTodoList(){
+  const el=document.getElementById('clientTodoList');
+  if(!el) return;
+  if(clientTodosData.length===0){
+    el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">No tasks for this client yet.</div>';
+    return;
+  }
+  const today=todayISO();
+  const open=clientTodosData.filter(t=>!t.done);
+  const done=clientTodosData.filter(t=>t.done);
+
+  function taskRow(t){
+    const overdue=t.due_date&&t.due_date<today&&!t.done;
+    const dueToday=t.due_date===today&&!t.done;
+    const dueSoon=t.due_date&&t.due_date>today&&t.due_date<=addDays(today,3)&&!t.done;
+    let dueChip='';
+    if(overdue) dueChip=`<span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:#fee2e2;color:#991b1b;white-space:nowrap">OVERDUE</span>`;
+    else if(dueToday) dueChip=`<span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:#fef3c7;color:#92400e;white-space:nowrap">DUE TODAY</span>`;
+    else if(dueSoon) dueChip=`<span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:#e0f2fe;color:#0369a1;white-space:nowrap">DUE SOON</span>`;
+    const dateStr=t.due_date?new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${overdue?'#fff5f5':dueToday?'#fffbf0':t.done?'#f9fafb':'var(--white)'};border:1px solid ${overdue?'#fecaca':dueToday?'#fde68a':'var(--line)'};border-radius:8px">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleClientTodo('${t.id}')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--navy);flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;color:${t.done?'var(--gray-light)':'var(--navy)'};${t.done?'text-decoration:line-through':''}">${esc(t.text)}</div>
+        ${dateStr?`<div style="font-size:11px;color:var(--gray);margin-top:2px">Due: ${dateStr}</div>`:''}
+      </div>
+      ${dueChip}
+      <input type="date" value="${t.due_date||''}" onchange="updateClientTodoDue('${t.id}',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;font-family:'Open Sans',sans-serif;color:var(--gray)" title="Change due date">
+      <button onclick="deleteClientTodo('${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--gray-light);font-size:16px;padding:0 2px;flex-shrink:0" title="Delete">×</button>
+    </div>`;
+  }
+
+  el.innerHTML=[
+    ...open.map(taskRow),
+    done.length>0?`<div style="font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;margin-top:8px;padding:0 2px">Completed</div>`:'',
+    ...done.map(taskRow)
+  ].join('');
+}
+
+async function addClientTodo(){
+  const idVal=parseInt(document.getElementById('clientTodoId').value);
+  const text=document.getElementById('clientTodoText').value.trim();
+  const due=document.getElementById('clientTodoDue').value||null;
+  if(!idVal){alert('Enter a Survivor ID.');return;}
+  if(!text){alert('Enter a task description.');return;}
+  document.getElementById('clientTodoText').value='';
+  document.getElementById('clientTodoDue').value='';
+  try{
+    const {data,error}=await sb.from('client_todos').insert({
+      case_id:idVal, text, done:false, due_date:due, user_id:currentUser.id
+    }).select().single();
+    if(error) throw error;
+    if(clientTodosLoaded===idVal){
+      clientTodosData.push(data);
+      clientTodosData.sort((a,b)=>{
+        if(!a.due_date&&!b.due_date) return 0;
+        if(!a.due_date) return 1;
+        if(!b.due_date) return -1;
+        return a.due_date.localeCompare(b.due_date);
+      });
+      renderClientTodoList();
+    } else {
+      await loadAndRenderClientTodos(idVal);
+    }
+    // refresh daily briefing alerts
+    renderDailyBriefing();
+  }catch(e){console.error('add client todo failed',e);}
+}
+
+async function toggleClientTodo(id){
+  const t=clientTodosData.find(x=>x.id===id);
+  if(!t) return;
+  t.done=!t.done;
+  renderClientTodoList();
+  try{
+    await sb.from('client_todos').update({done:t.done}).eq('id',id);
+    renderDailyBriefing();
+  }catch(e){t.done=!t.done;renderClientTodoList();}
+}
+
+async function updateClientTodoDue(id,date){
+  const t=clientTodosData.find(x=>x.id===id);
+  if(!t) return;
+  t.due_date=date||null;
+  try{
+    await sb.from('client_todos').update({due_date:date||null}).eq('id',id);
+    renderClientTodoList();
+    renderDailyBriefing();
+  }catch(e){console.error('update due date failed',e);}
+}
+
+async function deleteClientTodo(id){
+  clientTodosData=clientTodosData.filter(x=>x.id!==id);
+  renderClientTodoList();
+  try{
+    await sb.from('client_todos').delete().eq('id',id);
+    renderDailyBriefing();
+  }catch(e){console.error('delete client todo failed',e);}
+}
+
+// mini panel for roster profile
+async function renderRosterClientTodos(caseId){
+  const el=document.getElementById(`rosterClientTodos_${caseId}`);
+  if(!el) return;
+  el.innerHTML='<div style="font-size:12px;color:var(--gray-light)">Loading…</div>';
+  try{
+    const today=todayISO();
+    const {data,error}=await sb.from('client_todos').select('*').eq('case_id',caseId).eq('done',false).order('due_date',{ascending:true,nullsFirst:false}).limit(5);
+    if(error) throw error;
+    if(!data||data.length===0){
+      el.innerHTML='<div style="font-size:12px;color:var(--gray-light);font-style:italic">No open tasks.</div>';
+      return;
+    }
+    el.innerHTML=data.map(t=>{
+      const overdue=t.due_date&&t.due_date<today;
+      const dueToday=t.due_date===today;
+      const dateStr=t.due_date?new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):'No due date';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-left:3px solid ${overdue?'var(--red)':dueToday?'var(--amber)':'var(--blue)'};background:${overdue?'#fff5f5':dueToday?'#fffbf0':'var(--blue-bg)'};border-radius:0 6px 6px 0;margin-bottom:5px">
+        <div style="flex:1;font-size:12px;color:var(--gray)">${esc(t.text)}</div>
+        <div style="font-size:10px;font-weight:700;color:${overdue?'var(--red)':dueToday?'var(--amber)':'var(--gray-light)'};white-space:nowrap">${dateStr}</div>
+      </div>`;
+    }).join('');
+  }catch(e){el.innerHTML='<div style="font-size:12px;color:var(--red)">Failed to load tasks.</div>';}
+}
+
+// helper
+function addDays(iso,n){
+  const d=new Date(iso+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().split('T')[0];
+}
+
 // watch case ID input on notes tab
 function initNotesCaseIdWatcher(){
   const input=document.getElementById('notesCaseId');
@@ -2082,7 +2333,7 @@ async function renderNotesTab(){
   await loadTodos();
   renderTodos();
   initNotesCaseIdWatcher();
-  // reset case notes view
+  initClientTodoIdWatcher();
   const el=document.getElementById('caseNotesLog');
   if(el) el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">Enter a Survivor ID to see notes.</div>';
 }
