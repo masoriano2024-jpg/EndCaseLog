@@ -291,6 +291,29 @@
 </head>
 <body>
 
+<!-- ── LOGIN SCREEN ── -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1B2A4A 0%,#0077c8 100%);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:#1B2A4A;letter-spacing:-0.5px">END<span style="color:#0077c8">≡</span>AVORS</div>
+      <div style="font-size:12px;color:#64748b;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-top:4px">DCM Case Tracker</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">Email</label>
+      <input id="loginEmail" type="email" placeholder="your@email.com" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;outline:none" onkeydown="if(event.key==='Enter')loginSubmit()">
+    </div>
+    <div style="margin-bottom:24px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">Password</label>
+      <input id="loginPassword" type="password" placeholder="••••••••" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;outline:none" onkeydown="if(event.key==='Enter')loginSubmit()">
+    </div>
+    <button onclick="loginSubmit()" style="width:100%;padding:13px;background:#0077c8;color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;text-transform:uppercase">Sign In</button>
+    <div id="loginError" style="margin-top:12px;font-size:13px;color:#dc2626;text-align:center;min-height:18px;font-weight:600"></div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="appShell" style="display:none">
+
 <header class="top">
   <div class="brand">
     <div style="display:flex;flex-direction:column;gap:4px;margin-right:4px">
@@ -303,20 +326,28 @@
       <div class="sub">Disaster Case Management · Survivor Workflow</div>
     </div>
   </div>
-  <div class="today">
-    <span>Today</span>
-    <b id="todayDate">—</b>
-    <div id="syncStatus" style="font-size:11px;margin-top:4px;font-weight:600;letter-spacing:.3px;min-height:16px"></div>
+  <div style="display:flex;align-items:center;gap:20px">
+    <div class="today">
+      <span>Today</span>
+      <b id="todayDate">—</b>
+      <div id="syncStatus" style="font-size:11px;margin-top:4px;font-weight:600;letter-spacing:.3px;min-height:16px"></div>
+    </div>
+    <div style="text-align:right">
+      <div id="userNameDisplay" style="font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px"></div>
+      <div id="userRoleDisplay" style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px"></div>
+      <button onclick="logout()" style="margin-top:4px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:.4px;padding:3px 10px;border-radius:4px;cursor:pointer;text-transform:uppercase">Sign Out</button>
+    </div>
   </div>
 </header>
 
-<nav class="tabs">
+<nav class="tabs" id="mainNav">
   <button class="active" data-tab="dash">Dashboard</button>
   <button data-tab="roster">Roster</button>
   <button data-tab="weekly">Weekly Report</button>
-  <button data-tab="steps">The Steps</button>
+  <button data-tab="steps" id="stepsTabBtn">The Steps</button>
   <button data-tab="audit">Self-Audit</button>
   <button data-tab="notes">Notes</button>
+  <button data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
 </nav>
 
 <main>
@@ -429,7 +460,70 @@
 
     </div>
   </section>
+
+  <!-- ADMIN PANEL -->
+  <section class="panel" id="admin">
+    <h2 class="sec">Admin Panel</h2>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+      <!-- CREATE USER -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+        <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
+          ➕ Create User Account
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Full Name</label>
+            <input type="text" id="newUserName" placeholder="Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Email</label>
+            <input type="email" id="newUserEmail" placeholder="jane@endeavors.org" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Temporary Password</label>
+            <input type="text" id="newUserPassword" placeholder="Min 6 characters" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Role</label>
+            <select id="newUserRole" style="width:100%;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+              <option value="case_manager">Case Manager</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="program_manager">Program Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Office</label>
+            <select id="newUserOffice" style="width:100%;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+              <option value="Kerrville">Kerrville</option>
+              <option value="San Angelo">San Angelo</option>
+              <option value="Austin">Austin</option>
+            </select>
+          </div>
+          <button class="btn gold" onclick="createUser()" style="width:100%;margin-top:4px">Create Account</button>
+          <div id="createUserMsg" style="font-size:12px;font-weight:700;min-height:16px;text-align:center"></div>
+        </div>
+      </div>
+
+      <!-- USER LIST -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+        <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
+          <span>👥 All Users</span>
+          <button onclick="loadAdminUsers()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer">↻ Refresh</button>
+        </div>
+        <div id="adminUserList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:100px">
+          <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading users…</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
 </main>
+
+</div><!-- end appShell -->
 
 <button class="log-fab" onclick="openLog()">📞 Log a Contact</button>
 
@@ -501,6 +595,157 @@ const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzcXN0amt5dXl6dHZnbHV0dXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDg1NzUsImV4cCI6MjA5NzEyNDU3NX0.p9mHM3Ervz7Z5qezqDGUiSrb-u6JqKqLJSEEE8EyAio';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* ---------- AUTH STATE ---------- */
+let currentUser = null;
+let currentProfile = null;
+
+function isAdmin(){ return currentProfile?.role === 'admin'; }
+function isPM(){ return currentProfile?.role === 'program_manager'; }
+function isSupervisor(){ return currentProfile?.role === 'supervisor'; }
+function isCM(){ return currentProfile?.role === 'case_manager'; }
+function canSeeAllCases(){ return isAdmin() || isPM(); }
+function canEdit(){ return isAdmin() || isCM(); }
+
+function roleLabel(role){
+  return { admin:'Administrator', program_manager:'Program Manager', supervisor:'Supervisor', case_manager:'Case Manager' }[role] || role;
+}
+
+async function loginSubmit(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Please enter your email and password.'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await bootApp(data.user);
+}
+
+async function logout(){
+  await sb.auth.signOut();
+  currentUser = null;
+  currentProfile = null;
+  cases=[]; logs=[]; weekly=[]; roster=[];
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
+async function bootApp(user){
+  currentUser = user;
+  // load profile
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  currentProfile = profile;
+
+  // show app, hide login
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+
+  // update header
+  document.getElementById('userNameDisplay').textContent = profile?.full_name || user.email;
+  document.getElementById('userRoleDisplay').textContent = roleLabel(profile?.role) + (profile?.office ? ' · ' + profile.office : '');
+
+  // show/hide admin tab
+  if(isAdmin()){
+    document.getElementById('adminTabBtn').style.display = '';
+  }
+
+  // hide Steps tab for non-admins
+  if(!isAdmin()){
+    document.getElementById('stepsTabBtn').style.display = 'none';
+  }
+
+  // init app
+  document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  renderSteps();
+  await load();
+}
+
+/* ---------- ADMIN: CREATE USER ---------- */
+async function createUser(){
+  const name = document.getElementById('newUserName').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  const office = document.getElementById('newUserOffice').value;
+  const msg = document.getElementById('createUserMsg');
+  msg.textContent = '';
+
+  if(!name || !email || !password){ msg.style.color='var(--red)'; msg.textContent='All fields required.'; return; }
+  if(password.length < 6){ msg.style.color='var(--red)'; msg.textContent='Password must be at least 6 characters.'; return; }
+
+  msg.style.color='var(--gray)'; msg.textContent='Creating account…';
+
+  try{
+    // Use Supabase admin API via service role is not available from client
+    // Instead we use signUp which creates the user, then update their profile
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name, role, office } }
+    });
+    if(error) throw error;
+
+    // Profile is auto-created by trigger, but update it to be sure
+    if(data.user){
+      await sb.from('profiles').upsert({
+        id: data.user.id,
+        email,
+        full_name: name,
+        role,
+        office,
+        active: true
+      });
+    }
+
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Account created for ${name}`;
+    document.getElementById('newUserName').value='';
+    document.getElementById('newUserEmail').value='';
+    document.getElementById('newUserPassword').value='';
+    loadAdminUsers();
+  }catch(e){
+    msg.style.color='var(--red)';
+    msg.textContent='Error: ' + e.message;
+  }
+}
+
+async function loadAdminUsers(){
+  const el = document.getElementById('adminUserList');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
+  try{
+    const { data, error } = await sb.from('profiles').select('*').order('office').order('full_name');
+    if(error) throw error;
+    if(!data || data.length === 0){
+      el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
+      return;
+    }
+    const roleColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
+    const roleBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
+    el.innerHTML = data.map(u => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
+          <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')} · ${esc(u.office||'—')}</div>
+        </div>
+        <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+        <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
+      </div>`).join('');
+  }catch(e){
+    el.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
+  }
+}
+
+async function toggleUserActive(id, current){
+  try{
+    await sb.from('profiles').update({ active: !current }).eq('id', id);
+    loadAdminUsers();
+  }catch(e){ console.error('toggle active failed', e); }
+}
+
 /* ---------- DATA MODEL ---------- */
 const OUTREACH_DEFAULT = [
   {t:"Survivor is assigned", offset:{type:"start"}},
@@ -569,8 +814,12 @@ async function load(){
   renderAll();
   try{
     syncStart();
-    // cases
-    const {data:cData,error:cErr}=await sb.from('cases').select('*');
+    // cases — filter by role
+    let caseQuery = sb.from('cases').select('*');
+    if(isCM()) caseQuery = caseQuery.eq('user_id', currentUser.id);
+    else if(isSupervisor()) caseQuery = caseQuery.eq('office', currentProfile.office);
+    // admin + PM get all cases (RLS handles it)
+    const {data:cData,error:cErr}=await caseQuery;
     if(cErr) throw cErr;
     cases=(cData||[]).map(r=>({
       id:r.id, assigned:r.assigned, status:r.status, step:r.step,
@@ -622,7 +871,9 @@ async function saveCase(c){
     const {error}=await sb.from('cases').upsert({
       id:c.id, assigned:c.assigned, status:c.status, step:c.step,
       started:c.started, closed:c.closed||null, intake_start:c.intakeStart||null,
-      opened_at:c.openedAt||null, custom_steps:c.customSteps||null
+      opened_at:c.openedAt||null, custom_steps:c.customSteps||null,
+      user_id: currentUser?.id || null,
+      office: currentProfile?.office || null
     },{onConflict:'id'});
     if(error) throw error;
     // roster name
@@ -1407,6 +1658,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
   b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('show');
   if(b.dataset.tab==='notes')renderNotesTab();
   if(b.dataset.tab==='weekly')renderWeekly();
+  if(b.dataset.tab==='admin')loadAdminUsers();
 });
 document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show')});
 
@@ -1707,7 +1959,7 @@ let notesCaseIdLoaded = null;
 // ---- Supabase helpers ----
 async function loadTodos(){
   try{
-    const {data,error}=await sb.from('todos').select('*').order('created_at',{ascending:true});
+    const {data,error}=await sb.from('todos').select('*').eq('user_id', currentUser.id).order('created_at',{ascending:true});
     if(error) throw error;
     todos=(data||[]);
   }catch(e){ console.error('todos load failed',e); }
@@ -1718,7 +1970,7 @@ async function addTodo(){
   if(!text) return;
   input.value='';
   try{
-    const {data,error}=await sb.from('todos').insert({text,done:false}).select().single();
+    const {data,error}=await sb.from('todos').insert({text,done:false,user_id:currentUser.id}).select().single();
     if(error) throw error;
     todos.push(data);
     renderTodos();
@@ -1878,9 +2130,15 @@ async function auditLoadFromSupabase(clientId){
 
 /* ---------- INIT ---------- */
 (async function(){
-  document.getElementById('todayDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  renderSteps();
-  await load();
+  // Check if user already has a session
+  const { data: { session } } = await sb.auth.getSession();
+  if(session?.user){
+    await bootApp(session.user);
+  } else {
+    // Show login screen
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appShell').style.display = 'none';
+  }
 })();
 </script>
 </body>
