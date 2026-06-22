@@ -477,7 +477,7 @@
           </div>
           <div>
             <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Due Date</label>
-            <input type="date" id="clientTodoDue" style="padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+            <input type="date" id="clientTodoDue" style="width:140px;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
           </div>
           <button class="btn gold" style="white-space:nowrap;align-self:flex-end" onclick="addClientTodo()">+ Add Task</button>
         </div>
@@ -2204,12 +2204,12 @@ function renderClientTodoList(){
     const dateStr=t.due_date?new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${overdue?'#fff5f5':dueToday?'#fffbf0':t.done?'#f9fafb':'var(--white)'};border:1px solid ${overdue?'#fecaca':dueToday?'#fde68a':'var(--line)'};border-radius:8px">
       <input type="checkbox" ${t.done?'checked':''} onchange="toggleClientTodo('${t.id}')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--navy);flex-shrink:0">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:${t.done?'var(--gray-light)':'var(--navy)'};${t.done?'text-decoration:line-through':''}">${esc(t.text)}</div>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-size:13px;color:${t.done?'var(--gray-light)':'var(--navy)'};${t.done?'text-decoration:line-through':''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.text)}</div>
         ${dateStr?`<div style="font-size:11px;color:var(--gray);margin-top:2px">Due: ${dateStr}</div>`:''}
       </div>
       ${dueChip}
-      <input type="date" value="${t.due_date||''}" onchange="updateClientTodoDue('${t.id}',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;font-family:'Open Sans',sans-serif;color:var(--gray)" title="Change due date">
+      <input type="date" value="${t.due_date||''}" onchange="updateClientTodoDue('${t.id}',this.value)" style="flex-shrink:0;width:118px;font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;font-family:'Open Sans',sans-serif;color:var(--gray)" title="Change due date">
       <button onclick="deleteClientTodo('${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--gray-light);font-size:16px;padding:0 2px;flex-shrink:0" title="Delete">×</button>
     </div>`;
   }
