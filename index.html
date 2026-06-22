@@ -652,7 +652,7 @@ async function logout(){
   await sb.auth.signOut();
   currentUser = null;
   currentProfile = null;
-  cases=[]; logs=[]; weekly=[]; roster={};
+  cases=[]; logs=[]; weekly=[]; roster=[];
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('loginEmail').value = '';
@@ -917,8 +917,6 @@ async function saveCase(c){
 async function deleteCase(id){
   syncStart();
   try{
-    await sb.from('contact_logs').delete().eq('case_id',id);
-    await sb.from('roster').delete().eq('case_id',id);
     const {error}=await sb.from('cases').delete().eq('id',id);
     if(error) throw error;
     cacheWrite();
@@ -1005,15 +1003,13 @@ function fmt(iso){if(!iso)return'—';const d=new Date(iso+'T00:00:00');return d
 function addCal(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 function addBus(iso,n){let d=new Date(iso+'T00:00:00');let added=0;while(added<n){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)added++;}return d.toISOString().slice(0,10)}
 function dueDateFor(c,stepIdx){
-  const steps = stepsFor(c);
-  const o = steps?.[stepIdx]?.offset || {type:'start'};
-  if(o.type==='start') return c.assigned;
-  if(o.type==='cal') return addCal(c.assigned,o.n);
+  const o=OUTREACH[stepIdx].offset;
+  if(o.type==='start')return c.assigned;
+  if(o.type==='cal')return addCal(c.assigned,o.n);
   if(o.type==='bus'){
     // business days counted from the day after the calendar-day window ends (cal day 5 = +7)
     return addBus(addCal(c.assigned,7),o.n);
   }
-  return c.assigned;
 }
 function daysUntil(iso){const a=new Date(todayISO()+'T00:00:00'),b=new Date(iso+'T00:00:00');return Math.round((b-a)/86400000)}
 
@@ -1167,7 +1163,7 @@ async function renderBriefing(){
         <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Intake in Progress</div>
         ${intakeCases.map(c=>{
           const steps=stepsFor(c);
-          const pct=steps.length<=1?100:Math.round((c.step/(steps.length-1))*100);
+          const pct=Math.round((c.step/(steps.length-1))*100);
           return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">
             <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy);min-width:32px">#${c.id}</span>
             <div style="flex:1;height:5px;background:var(--line);border-radius:3px">
@@ -1234,7 +1230,7 @@ function renderDash(){
           <span class="due-chip green">In progress</span>
         </div>
         <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
-        <div class="progress"><i style="width:${total<=1?100:(c.step/(total-1))*100}%"></i></div>
+        <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
         <div class="case-actions">
           <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
           <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
@@ -1262,7 +1258,7 @@ function renderDash(){
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
       <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
-      <div class="progress"><i style="width:${total<=1?100:(c.step/(total-1))*100}%"></i></div>
+      <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
         <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
         <button class="btn sm gold" onclick="nextStep(${c.id})" ${c.step===total-1?'disabled':''}>Next Step →</button>
@@ -1274,14 +1270,14 @@ function renderDash(){
     </div>`;
   }).join('');
 }
-function esc(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]))}
+function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
 
 /* ---------- CASE ACTIONS ---------- */
 function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';document.getElementById('newName').value='';show('startModal')}
 function startCase(){
   const id=parseInt(document.getElementById('newId').value);
   if(!id){alert('Enter a numerical ID.');return;}
-  if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'||c.status==='open'))){alert('That ID already has an active case.');return;}
+  if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'))){alert('That ID already has an active case.');return;}
   const name=document.getElementById('newName').value.trim();
   if(name)roster[id]=name;
   const newCase={id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()};
@@ -1372,7 +1368,16 @@ let activeRosterId = null;
 
 function renderRoster(){
   const el=document.getElementById('rosterList');
-  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number)])].sort((a,b)=>a-b);
+  const statusPriority={open:0,intake:1,outreach:2,completed:3,closed:4,declined:5};
+  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number)])]
+    .sort((a,b)=>{
+      const ca=cases.find(x=>x.id===a);
+      const cb=cases.find(x=>x.id===b);
+      const pa=ca?(statusPriority[ca.status]??6):6;
+      const pb=cb?(statusPriority[cb.status]??6):6;
+      if(pa!==pb) return pa-pb;
+      return a-b;
+    });
   if(ids.length===0){el.innerHTML='<div class="empty" style="padding:20px;color:var(--gray-light);font-size:13px">No survivors yet.</div>';return;}
   el.innerHTML=ids.map(id=>{
     const c=cases.find(x=>x.id===id);
@@ -1615,7 +1620,7 @@ function renderWeekly(){
     const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
     h+=`<tr>
       <td style="white-space:nowrap">${fmt(l.date)}${l.time?`<br><span style="font-size:11px;color:var(--gray-light)">${l.time}</span>`:''}</td>
-      <td><span class="case-id" style="font-size:12px">#${l.id||l.caseId||'—'}</span></td>
+      <td><span class="case-id" style="font-size:12px">#${l.caseId||l.id||'—'}</span></td>
       <td style="text-transform:capitalize">${l.method||l.type||'—'}</td>
       <td style="font-size:12px;font-weight:600;color:${resultColor}">${l.result||'—'}</td>
       <td style="font-size:12px;color:var(--gray)">${esc(l.notes||l.note||'')}</td>
@@ -1628,7 +1633,7 @@ function exportCSV(){
   let csv=headers.join(',')+'\n';
   const sorted=[...logs].sort((a,b)=>b.date.localeCompare(a.date));
   sorted.forEach(l=>{
-    const row=[weekEndingFor(l.date),l.date,l.id||l.caseId||'',l.method||l.type||'',l.notes||l.note||''];
+    const row=[weekEndingFor(l.date),l.date,l.caseId||l.id||'',l.type||'',l.notes||l.note||''];
     csv+=row.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv'});
@@ -2030,21 +2035,13 @@ function auditLoadEntry(idx){
   auditSavedIndex=idx;
   auditRender();
 }
-async function auditDeleteEntry(idx){
+function auditDeleteEntry(idx){
   if(!confirm('Delete this audit entry? Cannot be undone.'))return;
   const list=auditLoadList(auditClientId);
-  const entry=list[idx];
   list.splice(idx,1);
   auditSaveList(auditClientId,list);
   if(auditSavedIndex===idx){auditSavedIndex=null;auditChecked={};}
   auditRender();
-  try{
-    if(entry?._dbId){
-      await sb.from('audit_entries').delete().eq('id',entry._dbId);
-    } else if(entry?.savedAt){
-      await sb.from('audit_entries').delete().eq('case_id',parseInt(auditClientId)).eq('saved_at',entry.savedAt);
-    }
-  }catch(e){ console.error('audit delete from supabase failed',e); }
 }
 
 
@@ -2242,22 +2239,18 @@ async function addClientTodo(){
   document.getElementById('clientTodoText').value='';
   document.getElementById('clientTodoDue').value='';
   try{
-    const res = await sb.from('client_todos').insert({
+    const {data,error}=await sb.from('client_todos').insert({
       case_id:idVal, text, done:false, due_date:due, user_id:currentUser.id
-    }).select().single?.();
-    const data = res?.data ?? res;
-    const error = res?.error ?? null;
+    }).select().single();
     if(error) throw error;
     if(clientTodosLoaded===idVal){
-      if(data) {
-        clientTodosData.push(data);
-        clientTodosData.sort((a,b)=>{
-          if(!a.due_date&&!b.due_date) return 0;
-          if(!a.due_date) return 1;
-          if(!b.due_date) return -1;
-          return a.due_date.localeCompare(b.due_date);
-        });
-      }
+      clientTodosData.push(data);
+      clientTodosData.sort((a,b)=>{
+        if(!a.due_date&&!b.due_date) return 0;
+        if(!a.due_date) return 1;
+        if(!b.due_date) return -1;
+        return a.due_date.localeCompare(b.due_date);
+      });
       renderClientTodoList();
     } else {
       await loadAndRenderClientTodos(idVal);
@@ -2386,7 +2379,6 @@ async function auditLoadFromSupabase(clientId){
     // convert to the format auditLoadList expects
     return data.map(r=>({
       savedAt:r.saved_at,
-      _dbId:r.id,
       date:new Date(r.saved_at).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
       time:new Date(r.saved_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
       checked:r.checked||{},
@@ -2411,4 +2403,3 @@ async function auditLoadFromSupabase(clientId){
 </script>
 </body>
 </html>
-
