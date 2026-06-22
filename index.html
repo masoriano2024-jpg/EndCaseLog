@@ -2247,7 +2247,7 @@ async function addClientTodo(){
       await loadAndRenderClientTodos(idVal);
     }
     // refresh daily briefing alerts
-    renderDailyBriefing();
+    renderBriefing();
   }catch(e){console.error('add client todo failed',e);}
 }
 
@@ -2258,7 +2258,7 @@ async function toggleClientTodo(id){
   renderClientTodoList();
   try{
     await sb.from('client_todos').update({done:t.done}).eq('id',id);
-    renderDailyBriefing();
+    renderBriefing();
   }catch(e){t.done=!t.done;renderClientTodoList();}
 }
 
@@ -2269,7 +2269,7 @@ async function updateClientTodoDue(id,date){
   try{
     await sb.from('client_todos').update({due_date:date||null}).eq('id',id);
     renderClientTodoList();
-    renderDailyBriefing();
+    renderBriefing();
   }catch(e){console.error('update due date failed',e);}
 }
 
@@ -2278,7 +2278,7 @@ async function deleteClientTodo(id){
   renderClientTodoList();
   try{
     await sb.from('client_todos').delete().eq('id',id);
-    renderDailyBriefing();
+    renderBriefing();
   }catch(e){console.error('delete client todo failed',e);}
 }
 
