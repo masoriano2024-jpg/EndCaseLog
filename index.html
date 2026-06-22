@@ -308,6 +308,48 @@
     </div>
     <button onclick="loginSubmit()" style="width:100%;padding:13px;background:#0077c8;color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;text-transform:uppercase">Sign In</button>
     <div id="loginError" style="margin-top:12px;font-size:13px;color:#dc2626;text-align:center;min-height:18px;font-weight:600"></div>
+    <div style="text-align:center;margin-top:14px">
+      <a href="#" onclick="showForgotPassword();return false" style="font-size:12px;color:#64748b;text-decoration:underline">Forgot password?</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── FORGOT PASSWORD SCREEN ── -->
+<div id="forgotScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1B2A4A 0%,#0077c8 100%);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:#1B2A4A">Reset Your Password</div>
+      <div style="font-size:13px;color:#64748b;margin-top:6px">Enter your email and we'll send you a reset link.</div>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">Email</label>
+      <input id="forgotEmail" type="email" placeholder="your@email.com" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;outline:none" onkeydown="if(event.key==='Enter')sendResetEmail()">
+    </div>
+    <button onclick="sendResetEmail()" style="width:100%;padding:13px;background:#0077c8;color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;text-transform:uppercase">Send Reset Link</button>
+    <div id="forgotMsg" style="margin-top:12px;font-size:13px;text-align:center;min-height:18px;font-weight:600"></div>
+    <div style="text-align:center;margin-top:14px">
+      <a href="#" onclick="backToLogin();return false" style="font-size:12px;color:#64748b;text-decoration:underline">← Back to Sign In</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── SET NEW PASSWORD SCREEN (landed on via reset email link) ── -->
+<div id="newPasswordScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1B2A4A 0%,#0077c8 100%);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:#1B2A4A">Set New Password</div>
+      <div style="font-size:13px;color:#64748b;margin-top:6px">Choose a new password for your account.</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">New Password</label>
+      <input id="newPassword1" type="password" placeholder="Min 6 characters" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;outline:none">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">Confirm Password</label>
+      <input id="newPassword2" type="password" placeholder="Re-type password" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;outline:none" onkeydown="if(event.key==='Enter')submitNewPassword()">
+    </div>
+    <button onclick="submitNewPassword()" style="width:100%;padding:13px;background:#0077c8;color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;text-transform:uppercase">Update Password</button>
+    <div id="newPasswordMsg" style="margin-top:12px;font-size:13px;text-align:center;min-height:18px;font-weight:600"></div>
   </div>
 </div>
 
@@ -646,6 +688,61 @@ async function loginSubmit(){
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if(error){ errEl.textContent = error.message; return; }
   await bootApp(data.user);
+}
+
+function showForgotPassword(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('forgotScreen').style.display = 'flex';
+  document.getElementById('forgotEmail').value = document.getElementById('loginEmail').value;
+  document.getElementById('forgotMsg').textContent = '';
+}
+
+function backToLogin(){
+  document.getElementById('forgotScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+async function sendResetEmail(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  const msg = document.getElementById('forgotMsg');
+  if(!email){ msg.style.color = '#dc2626'; msg.textContent = 'Enter your email first.'; return; }
+  msg.style.color = '#64748b'; msg.textContent = 'Sending…';
+  try{
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if(error) throw error;
+    msg.style.color = '#166534';
+    msg.textContent = '✓ Check your email for a reset link.';
+  }catch(e){
+    msg.style.color = '#dc2626';
+    msg.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function submitNewPassword(){
+  const p1 = document.getElementById('newPassword1').value;
+  const p2 = document.getElementById('newPassword2').value;
+  const msg = document.getElementById('newPasswordMsg');
+  if(!p1 || !p2){ msg.style.color = '#dc2626'; msg.textContent = 'Please fill in both fields.'; return; }
+  if(p1.length < 6){ msg.style.color = '#dc2626'; msg.textContent = 'Password must be at least 6 characters.'; return; }
+  if(p1 !== p2){ msg.style.color = '#dc2626'; msg.textContent = 'Passwords do not match.'; return; }
+  msg.style.color = '#64748b'; msg.textContent = 'Updating…';
+  try{
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    if(error) throw error;
+    msg.style.color = '#166534';
+    msg.textContent = '✓ Password updated! Redirecting…';
+    setTimeout(async()=>{
+      document.getElementById('newPasswordScreen').style.display = 'none';
+      const { data: { session } } = await sb.auth.getSession();
+      if(session?.user) await bootApp(session.user);
+      else { document.getElementById('loginScreen').style.display = 'flex'; }
+    }, 1500);
+  }catch(e){
+    msg.style.color = '#dc2626';
+    msg.textContent = 'Error: ' + e.message;
+  }
 }
 
 async function logout(){
@@ -2390,6 +2487,22 @@ async function auditLoadFromSupabase(clientId){
 
 /* ---------- INIT ---------- */
 (async function(){
+  // Listen for password recovery event (fires when user lands here via reset link)
+  let recoveryMode = false;
+  sb.auth.onAuthStateChange((event, session) => {
+    if(event === 'PASSWORD_RECOVERY'){
+      recoveryMode = true;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('forgotScreen').style.display = 'none';
+      document.getElementById('appShell').style.display = 'none';
+      document.getElementById('newPasswordScreen').style.display = 'flex';
+    }
+  });
+
+  // give the auth listener a moment to catch a recovery token in the URL hash
+  await new Promise(r => setTimeout(r, 400));
+  if(recoveryMode) return;
+
   // Check if user already has a session
   const { data: { session } } = await sb.auth.getSession();
   if(session?.user){
