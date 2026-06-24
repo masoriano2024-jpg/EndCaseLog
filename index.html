@@ -1433,7 +1433,8 @@ function save(){
   // (fine for single-user; full sync handled by individual saveCase calls)
 }
 function stepsFor(c){
-  const path=c.status==='intake'?'intake':'outreach';
+  const path=c.status==='intake'?'intake':(c.status==='outreach'?'outreach':null);
+  if(!path) return c.status==='open'?INTAKE:OUTREACH;
   if(c.customSteps&&c.customSteps[path]) return c.customSteps[path];
   return path==='outreach'?OUTREACH:INTAKE;
 }
@@ -1444,13 +1445,15 @@ function fmt(iso){if(!iso)return'—';const d=new Date(iso+'T00:00:00');return d
 function addCal(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 function addBus(iso,n){let d=new Date(iso+'T00:00:00');let added=0;while(added<n){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)added++;}return d.toISOString().slice(0,10)}
 function dueDateFor(c,stepIdx){
-  const o=OUTREACH[stepIdx].offset;
+  const steps=stepsFor(c);
+  const o=(steps[stepIdx]&&steps[stepIdx].offset)||{type:'start'};
   if(o.type==='start')return c.assigned;
   if(o.type==='cal')return addCal(c.assigned,o.n);
   if(o.type==='bus'){
     // business days counted from the day after the calendar-day window ends (cal day 5 = +7)
     return addBus(addCal(c.assigned,7),o.n);
   }
+  return c.assigned;
 }
 function daysUntil(iso){const a=new Date(todayISO()+'T00:00:00'),b=new Date(iso+'T00:00:00');return Math.round((b-a)/86400000)}
 
@@ -2024,7 +2027,7 @@ function recalcWeekly(){
   logs.forEach(l=>{const w=weekEndingFor(l.date);byWeek[w]=byWeek[w]||{contacts:0};byWeek[w].contacts++;});
   Object.keys(byWeek).forEach(w=>{
     let row=weekly.find(r=>r[0]===w);
-    if(!row){row=[w,'','','','','','','',''];weekly.push(row);}
+    if(!row){row=[w,'',''];weekly.push(row);}
     row[1]=byWeek[w].contacts;
   });
   weekly.sort((a,b)=>a[0]<b[0]?-1:1);
@@ -2053,28 +2056,29 @@ function renderWeekly(){
   const t=document.getElementById('weekTable');
   if(!t)return;
   if(weekLogs.length===0){
-    t.innerHTML='<tr><td colspan="5" style="padding:20px;color:var(--gray-light);font-size:13px;text-align:center">No contact logs recorded this week.</td></tr>';
+    t.innerHTML='<thead><tr><th colspan="5" style="padding:20px;color:var(--gray-light);font-size:13px;text-align:center;background:var(--navy)">No contact logs recorded this week.</th></tr></thead>';
     return;
   }
-  let h=`<tr><th>Date</th><th>Client ID</th><th>Method</th><th>Result</th><th>Notes</th></tr>`;
+  let h=`<thead><tr><th>Date</th><th>Client ID</th><th>Method</th><th>Result</th><th>Notes</th></tr></thead><tbody>`;
   weekLogs.forEach(l=>{
     const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
     h+=`<tr>
       <td style="white-space:nowrap">${fmt(l.date)}${l.time?`<br><span style="font-size:11px;color:var(--gray-light)">${l.time}</span>`:''}</td>
-      <td><span class="case-id" style="font-size:12px">#${l.caseId||l.id||'—'}</span></td>
-      <td style="text-transform:capitalize">${l.method||l.type||'—'}</td>
+      <td><span class="case-id" style="font-size:12px">#${l.id||'—'}</span></td>
+      <td style="text-transform:capitalize">${l.method||'—'}</td>
       <td style="font-size:12px;font-weight:600;color:${resultColor}">${l.result||'—'}</td>
-      <td style="font-size:12px;color:var(--gray)">${esc(l.notes||l.note||'')}</td>
+      <td style="font-size:12px;color:var(--gray)">${esc(l.notes||'')}</td>
     </tr>`;
   });
+  h+=`</tbody>`;
   t.innerHTML=h;
 }
 function exportCSV(){
-  const headers=['Week Ending','Date','Client ID','Type','Notes'];
+  const headers=['Week Ending','Date','Client ID','Method','Notes'];
   let csv=headers.join(',')+'\n';
   const sorted=[...logs].sort((a,b)=>b.date.localeCompare(a.date));
   sorted.forEach(l=>{
-    const row=[weekEndingFor(l.date),l.date,l.caseId||l.id||'',l.type||'',l.notes||l.note||''];
+    const row=[weekEndingFor(l.date),l.date,l.id||'',l.method||'',l.notes||''];
     csv+=row.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv'});
@@ -2768,7 +2772,8 @@ function addDays(iso,n){
 // watch case ID input on notes tab
 function initNotesCaseIdWatcher(){
   const input=document.getElementById('notesCaseId');
-  if(!input) return;
+  if(!input||input._watched) return;
+  input._watched=true;
   let debounce=null;
   input.addEventListener('input',()=>{
     clearTimeout(debounce);
