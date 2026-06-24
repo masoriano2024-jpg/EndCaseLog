@@ -1135,14 +1135,7 @@ async function handleFlagClick(caseId, currentlyFlagged){
   await flagCaseForReview(caseId, currentlyFlagged);
   const el = document.getElementById('userCaseloadView');
   if(el && el.style.display!=='none'){
-    const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
-    const rank={outreach:0,intake:1,open:2};
-    active.sort((a,b)=>{
-      if(a.status!==b.status) return rank[a.status]-rank[b.status];
-      if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
-      return 0;
-    });
-    el.innerHTML = `<div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
+    renderTeamCaseloadList();
   }
   renderDash();
 }
@@ -1181,7 +1174,7 @@ async function flagCaseForReview(caseId, currentlyFlagged){
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
 function renderReadOnlyCard(c){
   if(c.status==='open'){
-    return `<div class="case-card open">
+    return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
         <div><span class="case-id">#${c.id}<span class="tag open">Open Case</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -1191,14 +1184,14 @@ function renderReadOnlyCard(c){
       <div class="case-step">Intake complete. Survivor is an active open case.</div>
       <div class="case-actions">
         <span style="flex:1"></span>
-        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
       </div>
     </div>`;
   }
   if(c.status==='intake'){
     const steps=stepsFor(c);
     const total=steps.length;
-    return `<div class="case-card intake">
+    return `<div class="case-card intake" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
         <div><span class="case-id">#${c.id}<span class="tag intake">Intake</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -1209,7 +1202,7 @@ function renderReadOnlyCard(c){
       <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
         <span style="flex:1"></span>
-        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
       </div>
     </div>`;
   }
@@ -1222,7 +1215,7 @@ function renderReadOnlyCard(c){
   else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';}
   else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
   const steps=stepsFor(c);const total=steps.length;
-  return `<div class="case-card ${cls}">
+  return `<div class="case-card ${cls}" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
     <div class="case-head">
       <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
         ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -1233,34 +1226,203 @@ function renderReadOnlyCard(c){
     <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
     <div class="case-actions">
       <span style="flex:1"></span>
-      <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+      <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
     </div>
   </div>`;
 }
 
 let teamDrillUserCases = [];
+let teamDrillUserName = null;
+
+function renderTeamCaseloadList(){
+  const el = document.getElementById('userCaseloadView');
+  if(!el) return;
+  const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
+  const rank={outreach:0,intake:1,open:2};
+  active.sort((a,b)=>{
+    if(a.status!==b.status) return rank[a.status]-rank[b.status];
+    if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
+    return 0;
+  });
+  el.innerHTML = active.length===0
+    ? `<div class="empty">No active cases for ${esc(teamDrillUserName||'this user')} right now.</div>`
+    : `<p class="sec-note" style="margin-bottom:10px">Click a case to see full contact history, audit history, notes, and tasks.</p><div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
+}
 
 function toggleUserCaseload(userId, userName){
+  teamDrillUserName = userName;
   const el = document.getElementById('userCaseloadView');
   const btn = document.getElementById('toggleCaseloadBtn');
   if(!el) return;
   if(el.style.display==='none'){
-    const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
-    const rank={outreach:0,intake:1,open:2};
-    active.sort((a,b)=>{
-      if(a.status!==b.status) return rank[a.status]-rank[b.status];
-      if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
-      return 0;
-    });
-    el.innerHTML = active.length===0
-      ? `<div class="empty">No active cases for ${esc(userName)} right now.</div>`
-      : `<div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
+    renderTeamCaseloadList();
     el.style.display='block';
     btn.textContent = `🔼 Hide ${esc(userName)}'s Dashboard`;
   } else {
     el.style.display='none';
     btn.textContent = `👁 View ${esc(userName)}'s Dashboard`;
   }
+}
+
+/* ---------- FULL CLIENT PROFILE (read-only, from Team tab) ---------- */
+async function openTeamClientProfile(id){
+  const el = document.getElementById('userCaseloadView');
+  if(!el) return;
+  el.style.display='block';
+  el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading client profile…</div>';
+
+  const c = teamDrillUserCases.find(x=>x.id===id);
+  const clientLogs = [...logs.filter(l=>l.id===id)].sort((a,b)=>b.date.localeCompare(a.date));
+  const auditList = await auditLoadFromSupabase(id) || [];
+  const name = roster[id] || null;
+
+  let caseHtml='';
+  if(c){
+    const steps=stepsFor(c);
+    const stepLabel=steps[c.step]?steps[c.step].t:'—';
+    const statusColor=c.status==='outreach'?'var(--amber)':c.status==='intake'?'var(--blue)':c.status==='open'?'var(--green)':'var(--gray-light)';
+    caseHtml=`
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
+        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</div><div class="profile-stat-lbl">Status</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
+      </div>
+      <div style="font-size:13px;color:var(--gray);padding:10px 0 4px">
+        ${c.status==='outreach'||c.status==='intake'?`<b>Current step:</b> ${c.step+1} of ${steps.length} — ${esc(stepLabel)}`:''}
+      </div>`;
+  } else {
+    caseHtml='<div style="font-size:13px;color:var(--gray-light);padding:8px 0">No active case found.</div>';
+  }
+
+  const logHtml=clientLogs.length===0
+    ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No contact logs recorded.</div>'
+    :clientLogs.map(l=>{
+      const resultColor=l.result==='Made contact'?'var(--green)':l.result==='Left message'?'var(--amber)':'var(--gray-light)';
+      const resultIcon=l.result==='Made contact'?'✓':l.result==='Left message'?'💬':'✗';
+      return `<div class="profile-log-row">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}${l.time?` <span style="font-weight:500;color:var(--gray-light)">${l.time}</span>`:''}</span>
+          <span style="font-size:11px;background:var(--blue-bg);border-radius:4px;padding:2px 7px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
+          <span style="font-size:11px;font-weight:700;color:${resultColor}">${resultIcon} ${l.result||'—'}</span>
+        </div>
+        ${l.notes?`<div style="font-size:12px;color:var(--ink);background:var(--blue-bg);border-left:3px solid var(--line);border-radius:0 5px 5px 0;padding:6px 10px;margin-top:6px;line-height:1.5">${esc(l.notes)}</div>`:''}
+      </div>`;
+    }).join('');
+
+  const auditHtml=auditList.length===0
+    ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No audit records saved yet.</div>'
+    :[...auditList].reverse().map((entry,i)=>{
+      const done=Object.values(entry.checked||{}).filter(Boolean).length;
+      const total=Object.keys(entry.checked||{}).length;
+      const pct=total?Math.round((done/total)*100):0;
+      return `<div class="profile-audit-row">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;color:var(--navy)">${entry.savedAt?new Date(entry.savedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Audit '+(auditList.length-i)}</span>
+          <span style="font-size:11px;font-weight:700;color:${pct===100?'var(--green)':'var(--blue)'}">${pct}% complete · ${done}/${total} items</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  el.innerHTML=`
+    <button class="btn sm ghost" onclick="renderTeamCaseloadList()" style="margin-bottom:14px">← Back to ${esc(teamDrillUserName||'Caseload')}</button>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-card);overflow:hidden">
+
+      <!-- HEADER -->
+      <div style="background:var(--navy);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
+          ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
+        </div>
+      </div>
+
+      <!-- FLAG -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        ${c&&c.flaggedForReview?flagBadge(c):'<div style="font-size:12px;color:var(--gray-light)">Not currently flagged.</div>'}
+        <button class="btn sm ${c&&c.flaggedForReview?'ghost':'amber'}" style="margin-top:8px" onclick="handleFlagClickInProfile(${id},${!!(c&&c.flaggedForReview)})">${c&&c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+      </div>
+
+      <!-- CASE STATUS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Status</div>
+        ${caseHtml}
+      </div>
+
+      <!-- CONTACT LOGS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Contact History <span style="font-weight:500;text-transform:none;letter-spacing:0">(${clientLogs.length} log${clientLogs.length!==1?'s':''} total)</span></div>
+        ${logHtml}
+      </div>
+
+      <!-- AUDIT HISTORY -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Audit History <span style="font-weight:500;text-transform:none;letter-spacing:0">(${auditList.length} saved)</span></div>
+        ${auditHtml}
+      </div>
+
+      <!-- CASE NOTES -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Notes</div>
+        <div id="teamNotes_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
+      </div>
+
+      <!-- CLIENT TO-DOS -->
+      <div style="padding:16px 20px">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Open Tasks</div>
+        <div id="teamTodos_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
+      </div>
+
+    </div>`;
+
+  renderTeamCaseNotes(id);
+  renderTeamClientTodos(id);
+}
+
+async function handleFlagClickInProfile(caseId, currentlyFlagged){
+  await flagCaseForReview(caseId, currentlyFlagged);
+  openTeamClientProfile(caseId);
+}
+
+async function renderTeamCaseNotes(caseId){
+  const el=document.getElementById(`teamNotes_${caseId}`);
+  if(!el) return;
+  try{
+    const {data,error}=await sb.from('case_notes').select('*').eq('case_id',caseId).order('created_at',{ascending:false}).limit(5);
+    if(error) throw error;
+    if(!data||data.length===0){
+      el.innerHTML='<div style="font-size:12px;color:var(--gray-light);font-style:italic">No case notes yet.</div>';
+      return;
+    }
+    el.innerHTML=data.map(n=>{
+      const d=new Date(n.created_at);
+      const dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      return `<div style="border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:6px;background:var(--blue-bg);border-radius:0 6px 6px 0">
+        <div style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--blue);margin-bottom:2px">${dateStr}</div>
+        <div style="font-size:12px;color:var(--gray);line-height:1.5;white-space:pre-wrap">${esc(n.note)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div style="font-size:12px;color:var(--red)">Failed to load notes.</div>'; }
+}
+
+async function renderTeamClientTodos(caseId){
+  const el=document.getElementById(`teamTodos_${caseId}`);
+  if(!el) return;
+  try{
+    const today=todayISO();
+    const {data,error}=await sb.from('client_todos').select('*').eq('case_id',caseId).eq('done',false).order('due_date',{ascending:true,nullsFirst:false}).limit(5);
+    if(error) throw error;
+    if(!data||data.length===0){
+      el.innerHTML='<div style="font-size:12px;color:var(--gray-light);font-style:italic">No open tasks.</div>';
+      return;
+    }
+    el.innerHTML=data.map(t=>{
+      const overdue = t.due_date && t.due_date < today;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">
+        <span style="flex:1;color:var(--ink)">${esc(t.text)}</span>
+        ${t.due_date?`<span style="font-size:11px;font-weight:700;color:${overdue?'var(--red)':'var(--gray)'};white-space:nowrap">${fmt(t.due_date)}</span>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div style="font-size:12px;color:var(--red)">Failed to load tasks.</div>'; }
 }
 
 /* ---------- LAYER 2: INDIVIDUAL CASE MANAGER DRILL-DOWN ---------- */
