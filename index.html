@@ -1319,8 +1319,10 @@ async function openTeamClientProfile(id){
   const auditHtml=auditList.length===0
     ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No audit records saved yet.</div>'
     :[...auditList].reverse().map((entry,i)=>{
-      const done=Object.values(entry.checked||{}).filter(Boolean).length;
-      const total=Object.keys(entry.checked||{}).length;
+      // Use the done/total saved at audit-save time — recomputing from entry.checked
+      // undercounts total, since unchecked items are never given an explicit key.
+      const done=entry.done??0;
+      const total=entry.total??auditTotal();
       const pct=total?Math.round((done/total)*100):0;
       return `<div class="profile-audit-row">
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2280,8 +2282,10 @@ async function openClientProfile(id, silent=false){
   const auditHtml=auditList.length===0
     ?'<div style="font-size:13px;color:var(--gray-light);padding:10px 0">No audit records saved yet.</div>'
     :[...auditList].reverse().map((entry,i)=>{
-      const done=Object.values(entry.checked||{}).filter(Boolean).length;
-      const total=Object.keys(entry.checked||{}).length;
+      // Use the done/total saved at audit-save time — recomputing from entry.checked
+      // undercounts total, since unchecked items are never given an explicit key.
+      const done=entry.done??0;
+      const total=entry.total??auditTotal();
       const pct=total?Math.round((done/total)*100):0;
       return `<div class="profile-audit-row">
         <div style="display:flex;align-items:center;justify-content:space-between">
