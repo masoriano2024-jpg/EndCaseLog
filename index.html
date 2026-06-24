@@ -288,6 +288,7 @@
   .ah-del:hover{text-decoration:underline}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -389,6 +390,7 @@
   <button data-tab="steps" id="stepsTabBtn">The Steps</button>
   <button data-tab="audit">Self-Audit</button>
   <button data-tab="notes">Notes</button>
+  <button data-tab="team" id="teamTabBtn" style="display:none">Team</button>
   <button data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
 </nav>
 
@@ -528,6 +530,11 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- TEAM DASHBOARD -->
+  <section class="panel" id="team">
+    <div id="teamContent"></div>
   </section>
 
   <!-- ADMIN PANEL -->
@@ -776,6 +783,11 @@ async function bootApp(user){
     document.getElementById('adminTabBtn').style.display = '';
   }
 
+  // show/hide team tab
+  if(isSupervisor() || isPM() || isAdmin()){
+    document.getElementById('teamTabBtn').style.display = '';
+  }
+
   // hide Steps tab for non-admins
   if(!isAdmin()){
     document.getElementById('stepsTabBtn').style.display = 'none';
@@ -868,6 +880,338 @@ async function toggleUserActive(id, current){
     await sb.from('profiles').update({ active: !current }).eq('id', id);
     loadAdminUsers();
   }catch(e){ console.error('toggle active failed', e); }
+}
+
+/* ═══════════════════════════════════
+   TEAM DASHBOARD MODULE
+═══════════════════════════════════ */
+let teamChartInstances = [];
+let teamDrillOffice = null; // for PM drilling into an office
+let teamDrillUser = null;   // drilling into a specific case manager
+
+function destroyTeamCharts(){
+  teamChartInstances.forEach(c=>{ try{c.destroy();}catch(e){} });
+  teamChartInstances = [];
+}
+
+function lastNDays(n){
+  const days=[];
+  for(let i=n-1;i>=0;i--) days.push(addDays(todayISO(),-i));
+  return days;
+}
+
+async function loadTeamView(){
+  teamDrillOffice = null;
+  teamDrillUser = null;
+  if(isPM() || isAdmin()) await renderOfficeOverview();
+  else if(isSupervisor()) await renderCMOverview(currentProfile.office);
+}
+
+/* ---------- LAYER 1A: PROGRAM MANAGER — OFFICE OVERVIEW ---------- */
+async function renderOfficeOverview(){
+  destroyTeamCharts();
+  const el=document.getElementById('teamContent');
+  el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading office data…</div>';
+
+  const offices=['Kerrville','San Angelo','Austin'];
+  const officeStats={};
+
+  try{
+    for(const office of offices){
+      const { data: cs } = await sb.from('cases').select('*').eq('office', office);
+      const allCases = cs || [];
+      const active = allCases.filter(c=>['outreach','intake','open'].includes(c.status));
+      const overdue = active.filter(c=>{
+        if(c.status!=='outreach') return false;
+        const dd=dueDateFor(c,c.step);
+        return dd < todayISO();
+      });
+      const weekAgo = addDays(todayISO(),-6);
+      const { data: officeCaseIds } = await sb.from('cases').select('id').eq('office', office);
+      const idList=(officeCaseIds||[]).map(c=>c.id);
+      let contactsThisWeek=0;
+      if(idList.length>0){
+        const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).gte('date', weekAgo);
+        contactsThisWeek = (logsData||[]).length;
+      }
+      officeStats[office] = { active: active.length, overdue: overdue.length, contacts: contactsThisWeek, total: allCases.length };
+    }
+  }catch(e){ console.error('office overview load failed', e); }
+
+  const maxContacts = Math.max(1, ...offices.map(o=>officeStats[o]?.contacts||0));
+
+  el.innerHTML = `
+    <h2 class="sec">Office Overview</h2>
+    <p class="sec-note">Click an office to see its case managers.</p>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+      <canvas id="officeChart" height="90"></canvas>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      ${offices.map(o=>{
+        const s=officeStats[o]||{active:0,overdue:0,contacts:0,total:0};
+        return `<div onclick="drillIntoOffice('${o}')" style="cursor:pointer;background:var(--white);border:1px solid var(--line);border-left:5px solid ${s.overdue>0?'var(--red)':'var(--blue)'};border-radius:10px;padding:18px 20px;box-shadow:var(--shadow-card);transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 20px rgba(0,80,160,.18)'" onmouseout="this.style.boxShadow='var(--shadow-card)'">
+          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--navy);margin-bottom:10px">${o}</div>
+          <div style="display:flex;gap:18px">
+            <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:var(--navy)">${s.active}</div><div style="font-size:11px;color:var(--gray)">Active Cases</div></div>
+            <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:${s.overdue>0?'var(--red)':'var(--green)'}">${s.overdue}</div><div style="font-size:11px;color:var(--gray)">Overdue</div></div>
+            <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:var(--blue)">${s.contacts}</div><div style="font-size:11px;color:var(--gray)">Contacts (7d)</div></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  const ctx = document.getElementById('officeChart');
+  if(ctx){
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: offices,
+        datasets: [{
+          label: 'Contacts Logged (Last 7 Days)',
+          data: offices.map(o=>officeStats[o]?.contacts||0),
+          backgroundColor: '#0077c8',
+          borderRadius: 6,
+          maxBarThickness: 60
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, title: { display: true, text: 'Contacts Logged by Office — Last 7 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+}
+
+async function drillIntoOffice(office){
+  teamDrillOffice = office;
+  await renderCMOverview(office);
+}
+
+/* ---------- LAYER 1B: CASE MANAGER OVERVIEW (Supervisor view, or PM drilled into an office) ---------- */
+async function renderCMOverview(office){
+  destroyTeamCharts();
+  const el=document.getElementById('teamContent');
+  el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading team data…</div>';
+
+  try{
+    const { data: users } = await sb.from('profiles').select('*').eq('office', office).eq('role','case_manager').eq('active', true);
+    const cmList = users || [];
+
+    const weekAgo = addDays(todayISO(),-6);
+    const stats = [];
+    for(const u of cmList){
+      const { data: cs } = await sb.from('cases').select('*').eq('user_id', u.id);
+      const allCases = cs || [];
+      const active = allCases.filter(c=>['outreach','intake','open'].includes(c.status));
+      const overdue = active.filter(c=>{
+        if(c.status!=='outreach') return false;
+        return dueDateFor(c,c.step) < todayISO();
+      });
+      const idList = allCases.map(c=>c.id);
+      let contactsThisWeek = 0, madeContact = 0, totalAttempts = 0;
+      if(idList.length>0){
+        const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).gte('date', weekAgo);
+        contactsThisWeek = (logsData||[]).length;
+        const { data: allLogsData } = await sb.from('contact_logs').select('*').in('case_id', idList);
+        totalAttempts = (allLogsData||[]).length;
+        madeContact = (allLogsData||[]).filter(l=>l.result==='Made contact').length;
+      }
+      stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
+    }
+
+    const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
+
+    el.innerHTML = `
+      ${backBtn}
+      <h2 class="sec">${esc(office)} — Case Manager Activity</h2>
+      <p class="sec-note">Click a name to see their detailed contact history.</p>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="cmChart" height="90"></canvas>
+      </div>
+
+      <div style="display:grid;gap:10px">
+        ${stats.length===0?'<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">No case managers found for this office yet.</div>':stats.map(s=>{
+          const successRate = s.totalAttempts>0 ? Math.round((s.madeContact/s.totalAttempts)*100) : 0;
+          return `<div onclick="drillIntoUser('${s.user.id}','${esc(s.user.full_name||s.user.email)}','${office}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--line);border-left:5px solid ${s.overdue>0?'var(--red)':'var(--green)'};border-radius:10px;padding:14px 18px;box-shadow:var(--shadow-card)">
+            <div style="flex:1">
+              <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:var(--navy)">${esc(s.user.full_name||s.user.email)}</div>
+              <div style="font-size:11px;color:var(--gray);margin-top:2px">${s.active} active · ${s.totalAttempts} total contact attempts</div>
+            </div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--blue)">${s.contactsWeek}</div><div style="font-size:10px;color:var(--gray)">This Week</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--green)">${successRate}%</div><div style="font-size:10px;color:var(--gray)">Success Rate</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:${s.overdue>0?'var(--red)':'var(--gray-light)'}">${s.overdue}</div><div style="font-size:10px;color:var(--gray)">Overdue</div></div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+
+    const ctx = document.getElementById('cmChart');
+    if(ctx && stats.length>0){
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: stats.map(s=>s.user.full_name||s.user.email.split('@')[0]),
+          datasets: [{
+            label: 'Contacts This Week',
+            data: stats.map(s=>s.contactsWeek),
+            backgroundColor: '#0077c8',
+            borderRadius: 6,
+            maxBarThickness: 50
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false }, title: { display: true, text: 'Contacts Logged This Week by Case Manager', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+  }catch(e){
+    console.error('CM overview load failed', e);
+    el.innerHTML = '<div style="color:var(--red);padding:20px">Failed to load team data.</div>';
+  }
+}
+
+/* ---------- LAYER 2: INDIVIDUAL CASE MANAGER DRILL-DOWN ---------- */
+async function drillIntoUser(userId, userName, office){
+  teamDrillUser = userId;
+  destroyTeamCharts();
+  const el=document.getElementById('teamContent');
+  el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading…</div>';
+
+  try{
+    const { data: cs } = await sb.from('cases').select('*').eq('user_id', userId);
+    const allCases = cs || [];
+    const idList = allCases.map(c=>c.id);
+
+    let allLogs = [];
+    if(idList.length>0){
+      const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).order('date',{ascending:true});
+      allLogs = logsData || [];
+    }
+
+    const totalAttempts = allLogs.length;
+    const madeContact = allLogs.filter(l=>l.result==='Made contact').length;
+    const noAnswer = allLogs.filter(l=>l.result==='No answer').length;
+    const leftMessage = allLogs.filter(l=>l.result==='Left message').length;
+    const successRate = totalAttempts>0 ? Math.round((madeContact/totalAttempts)*100) : 0;
+
+    // daily volume for last 21 days
+    const days = lastNDays(21);
+    const dailyCounts = days.map(d=>allLogs.filter(l=>l.date===d).length);
+
+    const statusCounts = {};
+    allCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
+
+    const backBtn = isPM()||isAdmin()
+      ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
+      : `<button class="btn sm ghost" onclick="renderCMOverview(currentProfile.office)" style="margin-bottom:14px">← Team Overview</button>`;
+
+    el.innerHTML = `
+      ${backBtn}
+      <h2 class="sec">${esc(userName)}</h2>
+      <p class="sec-note">${esc(office)} · Contact activity & caseload detail</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Total Attempts', totalAttempts, 'var(--navy)')}
+        ${miniStat('Made Contact', madeContact, 'var(--green)')}
+        ${miniStat('No Answer', noAnswer, 'var(--red)')}
+        ${miniStat('Left Message', leftMessage, 'var(--amber)')}
+        ${miniStat('Success Rate', successRate+'%', 'var(--blue)')}
+        ${miniStat('Active Cases', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="dailyVolumeChart" height="80"></canvas>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+          <canvas id="resultBreakdownChart" height="200"></canvas>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+          <canvas id="statusBreakdownChart" height="200"></canvas>
+        </div>
+      </div>
+    `;
+
+    const dailyCtx = document.getElementById('dailyVolumeChart');
+    if(dailyCtx){
+      const chart = new Chart(dailyCtx, {
+        type: 'line',
+        data: {
+          labels: days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+          datasets: [{
+            label: 'Contacts Logged',
+            data: dailyCounts,
+            borderColor: '#0077c8',
+            backgroundColor: 'rgba(0,119,200,.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false }, title: { display: true, text: 'Daily Contact Volume — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const resultCtx = document.getElementById('resultBreakdownChart');
+    if(resultCtx){
+      const chart = new Chart(resultCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Made Contact','No Answer','Left Message'],
+          datasets: [{ data: [madeContact, noAnswer, leftMessage], backgroundColor: ['#166534','#dc2626','#b45309'] }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Contact Result Breakdown', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const statusCtx = document.getElementById('statusBreakdownChart');
+    if(statusCtx){
+      const labels = Object.keys(statusCounts);
+      const colorMap = {outreach:'#b45309',intake:'#0077c8',open:'#166534',completed:'#64748b',closed:'#64748b',declined:'#991b1b'};
+      const chart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+          labels: labels.map(l=>l.charAt(0).toUpperCase()+l.slice(1)),
+          datasets: [{ data: labels.map(l=>statusCounts[l]), backgroundColor: labels.map(l=>colorMap[l]||'#64748b') }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+  }catch(e){
+    console.error('user drill-down failed', e);
+    el.innerHTML = '<div style="color:var(--red);padding:20px">Failed to load case manager data.</div>';
+  }
+}
+
+function miniStat(label, value, color){
+  return `<div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card)">
+    <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${color}">${value}</div>
+    <div style="font-size:11px;color:var(--gray);margin-top:4px;text-transform:uppercase;letter-spacing:.4px">${label}</div>
+  </div>`;
 }
 
 /* ---------- DATA MODEL ---------- */
@@ -1850,6 +2194,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='notes')renderNotesTab();
   if(b.dataset.tab==='weekly')renderWeekly();
   if(b.dataset.tab==='admin')loadAdminUsers();
+  if(b.dataset.tab==='team')loadTeamView();
 });
 document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show')});
 
