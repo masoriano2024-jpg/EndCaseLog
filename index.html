@@ -631,6 +631,7 @@
       <label><input type="radio" name="method" value="Call" checked><span>📞 Call</span></label>
       <label><input type="radio" name="method" value="Text"><span>💬 Text</span></label>
       <label><input type="radio" name="method" value="Email"><span>✉ Email</span></label>
+      <label><input type="radio" name="method" value="In Person"><span>🤝 In Person</span></label>
     </div>
     <label>Date &amp; Time</label>
     <div style="display:flex;gap:10px">
@@ -1130,6 +1131,138 @@ async function renderCMOverview(office){
   }
 }
 
+async function handleFlagClick(caseId, currentlyFlagged){
+  await flagCaseForReview(caseId, currentlyFlagged);
+  const el = document.getElementById('userCaseloadView');
+  if(el && el.style.display!=='none'){
+    const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
+    const rank={outreach:0,intake:1,open:2};
+    active.sort((a,b)=>{
+      if(a.status!==b.status) return rank[a.status]-rank[b.status];
+      if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
+      return 0;
+    });
+    el.innerHTML = `<div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
+  }
+  renderDash();
+}
+
+/* ---------- FLAG FOR REVIEW ---------- */
+function flagBadge(c){
+  if(!c.flaggedForReview) return '';
+  const noteHtml = c.flagNote ? `<span style="margin-left:6px;color:var(--gray)">— ${esc(c.flagNote)}</span>` : '';
+  return `<div style="display:flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:6px 10px;margin:8px 0;font-size:12px">
+    <span style="font-size:14px">🚩</span>
+    <span style="font-weight:700;color:#9a3412">Flagged for review</span>${noteHtml}
+  </div>`;
+}
+
+async function flagCaseForReview(caseId, currentlyFlagged){
+  let note = null;
+  try{
+    if(currentlyFlagged){
+      await sb.from('cases').update({ flagged_for_review:false, flag_note:null, flagged_by:null, flagged_at:null }).eq('id', caseId);
+    } else {
+      note = prompt('Optional note for this flag (what should they look at?):','') || null;
+      await sb.from('cases').update({
+        flagged_for_review:true, flag_note:note, flagged_by:currentUser.id, flagged_at:new Date().toISOString()
+      }).eq('id', caseId);
+    }
+    // update in-memory copies so views refresh without a full reload
+    const newFlag = !currentlyFlagged;
+    const newNote = currentlyFlagged ? null : note;
+    const c1 = teamDrillUserCases.find(c=>c.id===caseId);
+    if(c1){ c1.flaggedForReview = newFlag; c1.flagNote = newNote; }
+    const c2 = cases.find(c=>c.id===caseId);
+    if(c2){ c2.flaggedForReview = newFlag; c2.flagNote = newNote; }
+  }catch(e){ console.error('flag toggle failed', e); alert('Could not update flag — try again.'); }
+}
+
+/* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
+function renderReadOnlyCard(c){
+  if(c.status==='open'){
+    return `<div class="case-card open">
+      <div class="case-head">
+        <div><span class="case-id">#${c.id}<span class="tag open">Open Case</span></span>
+          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
+      </div>
+      ${flagBadge(c)}
+      <div class="case-step">Intake complete. Survivor is an active open case.</div>
+      <div class="case-actions">
+        <span style="flex:1"></span>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+      </div>
+    </div>`;
+  }
+  if(c.status==='intake'){
+    const steps=stepsFor(c);
+    const total=steps.length;
+    return `<div class="case-card intake">
+      <div class="case-head">
+        <div><span class="case-id">#${c.id}<span class="tag intake">Intake</span></span>
+          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <span class="due-chip green">In progress</span>
+      </div>
+      ${flagBadge(c)}
+      <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
+      <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+      <div class="case-actions">
+        <span style="flex:1"></span>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+      </div>
+    </div>`;
+  }
+  // outreach
+  const dd=dueDateFor(c,c.step);
+  const du=daysUntil(dd);
+  let cls='ok',chip='green',chiptxt='Due '+fmt(dd);
+  if(du<0){cls='due';chip='red';chiptxt=`Overdue ${-du}d (${fmt(dd)})`;}
+  else if(du===0){cls='due';chip='red';chiptxt='DUE TODAY';}
+  else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';}
+  else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
+  const steps=stepsFor(c);const total=steps.length;
+  return `<div class="case-card ${cls}">
+    <div class="case-head">
+      <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
+        ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+      <span class="due-chip ${chip}">${chiptxt}</span>
+    </div>
+    ${flagBadge(c)}
+    <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
+    <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+    <div class="case-actions">
+      <span style="flex:1"></span>
+      <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+    </div>
+  </div>`;
+}
+
+let teamDrillUserCases = [];
+
+function toggleUserCaseload(userId, userName){
+  const el = document.getElementById('userCaseloadView');
+  const btn = document.getElementById('toggleCaseloadBtn');
+  if(!el) return;
+  if(el.style.display==='none'){
+    const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
+    const rank={outreach:0,intake:1,open:2};
+    active.sort((a,b)=>{
+      if(a.status!==b.status) return rank[a.status]-rank[b.status];
+      if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
+      return 0;
+    });
+    el.innerHTML = active.length===0
+      ? `<div class="empty">No active cases for ${esc(userName)} right now.</div>`
+      : `<div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
+    el.style.display='block';
+    btn.textContent = `🔼 Hide ${esc(userName)}'s Dashboard`;
+  } else {
+    el.style.display='none';
+    btn.textContent = `👁 View ${esc(userName)}'s Dashboard`;
+  }
+}
+
 /* ---------- LAYER 2: INDIVIDUAL CASE MANAGER DRILL-DOWN ---------- */
 async function drillIntoUser(userId, userName, office){
   teamDrillUser = userId;
@@ -1139,8 +1272,15 @@ async function drillIntoUser(userId, userName, office){
 
   try{
     const { data: cs } = await sb.from('cases').select('*').eq('user_id', userId);
-    const allCases = cs || [];
+    const allCases = (cs || []).map(r=>({
+      id:r.id, assigned:r.assigned, status:r.status, step:r.step,
+      started:r.started, closed:r.closed, intakeStart:r.intake_start,
+      openedAt:r.opened_at, customSteps:r.custom_steps||null,
+      flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
+      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null
+    }));
     const idList = allCases.map(c=>c.id);
+    teamDrillUserCases = allCases;
 
     let allLogs = [];
     if(idList.length>0){
@@ -1190,6 +1330,11 @@ async function drillIntoUser(userId, userName, office){
         <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
           <canvas id="statusBreakdownChart" height="200"></canvas>
         </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <button class="btn sm ghost" onclick="toggleUserCaseload('${userId}','${esc(userName)}')" id="toggleCaseloadBtn">👁 View ${esc(userName)}'s Dashboard</button>
+        <div id="userCaseloadView" style="display:none;margin-top:16px"></div>
       </div>
     `;
 
@@ -1343,7 +1488,9 @@ async function load(){
     cases=(cData||[]).map(r=>({
       id:r.id, assigned:r.assigned, status:r.status, step:r.step,
       started:r.started, closed:r.closed, intakeStart:r.intake_start,
-      openedAt:r.opened_at, customSteps:r.custom_steps||null
+      openedAt:r.opened_at, customSteps:r.custom_steps||null,
+      flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
+      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null
     }));
 
     // logs
@@ -1705,6 +1852,7 @@ function renderDash(){
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
           <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
         </div>
+        ${flagBadge(c)}
         <div class="case-step">Intake complete. Survivor is an active open case.</div>
         <div class="case-actions">
           <button class="btn sm ghost" onclick="reopenIntake(${c.id})" title="Move back to intake">← Back to Intake</button>
@@ -1724,6 +1872,7 @@ function renderDash(){
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
           <span class="due-chip green">In progress</span>
         </div>
+        ${flagBadge(c)}
         <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
         <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
         <div class="case-actions">
@@ -1752,6 +1901,7 @@ function renderDash(){
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
+      ${flagBadge(c)}
       <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
       <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
