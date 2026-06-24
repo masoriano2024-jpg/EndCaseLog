@@ -694,6 +694,7 @@ async function loginSubmit(){
   if(!email || !password){ errEl.textContent = 'Please enter your email and password.'; return; }
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if(error){ errEl.textContent = error.message; return; }
+  sb.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', data.user.id).then(()=>{});
   await bootApp(data.user);
 }
 
@@ -848,6 +849,21 @@ async function createUser(){
   }
 }
 
+function fmtLastLogin(ts){
+  if(!ts) return { label:'Never logged in', tier:'never' };
+  const d = new Date(ts);
+  const days = (Date.now() - d.getTime()) / 86400000;
+  let tier = 'recent';
+  if(days > 14) tier = 'stale';
+  else if(days > 3) tier = 'aging';
+  let label;
+  if(days < 1) label = 'Today, ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  else if(days < 2) label = 'Yesterday';
+  else if(days < 30) label = Math.floor(days) + ' days ago';
+  else label = d.toLocaleDateString();
+  return { label, tier };
+}
+
 async function loadAdminUsers(){
   const el = document.getElementById('adminUserList');
   if(!el) return;
@@ -859,17 +875,52 @@ async function loadAdminUsers(){
       el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
       return;
     }
-    const roleColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
+    const roleColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166524' };
     const roleBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
-    el.innerHTML = data.map(u => `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
-        <div style="flex:1;min-width:0">
-          <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
-          <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')} · ${esc(u.office||'—')}</div>
+    const loginTierColor = { recent:'#166534', aging:'#92400e', stale:'#991b1b', never:'#64748b' };
+    const loginTierBg = { recent:'#dcfce7', aging:'#fef3c7', stale:'#fee2e2', never:'#f1f5f9' };
+
+    // group by office
+    const groups = {};
+    data.forEach(u=>{
+      const office = u.office || 'Unassigned';
+      if(!groups[office]) groups[office] = [];
+      groups[office].push(u);
+    });
+    const officeOrder = ['Kerrville','San Angelo','Austin'];
+    const officeKeys = Object.keys(groups).sort((a,b)=>{
+      const ia = officeOrder.indexOf(a), ib = officeOrder.indexOf(b);
+      if(ia===-1 && ib===-1) return a.localeCompare(b);
+      if(ia===-1) return 1;
+      if(ib===-1) return -1;
+      return ia-ib;
+    });
+
+    el.innerHTML = officeKeys.map(office=>{
+      const users = groups[office];
+      const activeCount = users.filter(u=>u.active).length;
+      const rows = users.map(u=>{
+        const ll = fmtLastLogin(u.last_login);
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
+          <div style="flex:1;min-width:0">
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
+            <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
+          </div>
+          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
+          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+          <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
+        </div>`;
+      }).join('');
+      return `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 4px;margin-bottom:6px">
+          <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">📍 ${esc(office)}</span>
+          <span style="font-size:11px;color:var(--gray);font-family:'Open Sans',sans-serif">${activeCount}/${users.length} active</span>
         </div>
-        <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
-        <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
-      </div>`).join('');
+        <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
+      </div>`;
+    }).join('');
   }catch(e){
     el.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
   }
