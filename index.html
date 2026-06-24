@@ -1603,6 +1603,7 @@ let OUTREACH = OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:unde
 let INTAKE = INTAKE_DEFAULT.map(s=>({...s}));
 
 let cases = [];
+let reportCases = []; // org/office-scoped cases for Weekly Report compliance stats only
 let logs = [];
 let weekly = [];
 let roster = {}; // id -> name
@@ -1640,12 +1641,9 @@ async function load(){
   renderAll();
   try{
     syncStart();
-    // cases — filter by role
-    let caseQuery = sb.from('cases').select('*');
-    if(isCM()) caseQuery = caseQuery.eq('user_id', currentUser.id);
-    else if(isSupervisor()) caseQuery = caseQuery.eq('office', currentProfile.office);
-    // admin + PM get all cases (RLS handles it)
-    const {data:cData,error:cErr}=await caseQuery;
+    // Dashboard tab is always "my own caseload" — scoped by user_id for every role.
+    // Office-wide / org-wide visibility lives in the Team tab instead.
+    const {data:cData,error:cErr}=await sb.from('cases').select('*').eq('user_id', currentUser.id);
     if(cErr) throw cErr;
     cases=(cData||[]).map(r=>({
       id:r.id, assigned:r.assigned, status:r.status, step:r.step,
@@ -1653,6 +1651,19 @@ async function load(){
       openedAt:r.opened_at, customSteps:r.custom_steps||null,
       flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
       flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null
+    }));
+
+    // Weekly Report is a compliance tool, not a personal view — admins/PMs see org-wide,
+    // supervisors see their office, case managers see their own (mirrors the old Dashboard scope).
+    let reportQuery = sb.from('cases').select('*');
+    if(isCM()) reportQuery = reportQuery.eq('user_id', currentUser.id);
+    else if(isSupervisor()) reportQuery = reportQuery.eq('office', currentProfile.office);
+    const {data:rcData,error:rcErr}=await reportQuery;
+    if(rcErr) throw rcErr;
+    reportCases=(rcData||[]).map(r=>({
+      id:r.id, assigned:r.assigned, status:r.status, step:r.step,
+      started:r.started, closed:r.closed, intakeStart:r.intake_start,
+      openedAt:r.opened_at, customSteps:r.custom_steps||null
     }));
 
     // logs
@@ -1833,7 +1844,8 @@ async function renderBriefing(){
   const dueSoon=outreachCases.filter(c=>{const dd=dueDateFor(c,c.step);return dd>today&&daysUntil(dd)<=2;});
 
   // contacts logged today
-  const loggedToday=logs.filter(l=>l.date===today).length;
+  const myCaseIds=new Set(cases.map(c=>c.id));
+  const loggedToday=logs.filter(l=>l.date===today&&myCaseIds.has(l.id)).length;
 
   // step breakdown for outreach
   const stepCounts={};
@@ -2176,7 +2188,10 @@ let activeRosterId = null;
 function renderRoster(){
   const el=document.getElementById('rosterList');
   const statusPriority={open:0,intake:1,outreach:2,completed:3,closed:4,declined:5};
-  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number)])]
+  // Roster tab is the personal client list — only names tied to MY cases, not every
+  // roster row visible via RLS (that broader view lives in the Team tab now).
+  const myCaseIds=new Set(cases.map(c=>c.id));
+  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number).filter(id=>myCaseIds.has(id))])]
     .sort((a,b)=>{
       const ca=cases.find(x=>x.id===a);
       const cb=cases.find(x=>x.id===b);
@@ -2367,13 +2382,13 @@ function renderWeekStats(wedISO){
   const successCount=weekLogs.filter(l=>l.result==='Made contact').length;
 
   // cases opened this week
-  const newCases=cases.filter(c=>c.started>=start&&c.started<=end).length;
+  const newCases=reportCases.filter(c=>c.started>=start&&c.started<=end).length;
   // cases closed this week
-  const closedThisWeek=cases.filter(c=>c.closed&&c.closed>=start&&c.closed<=end).length;
+  const closedThisWeek=reportCases.filter(c=>c.closed&&c.closed>=start&&c.closed<=end).length;
   // currently pending (outreach + intake)
-  const pending=cases.filter(c=>c.status==='outreach'||c.status==='intake').length;
+  const pending=reportCases.filter(c=>c.status==='outreach'||c.status==='intake').length;
   // total active caseload
-  const activeCaseload=cases.filter(c=>['outreach','intake','open'].includes(c.status)).length;
+  const activeCaseload=reportCases.filter(c=>['outreach','intake','open'].includes(c.status)).length;
 
   const el=document.getElementById('weekStats');
   if(!el)return;
