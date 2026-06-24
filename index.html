@@ -1044,14 +1044,16 @@ async function drillIntoOffice(office){
   await renderCMOverview(office);
 }
 
-/* ---------- LAYER 1B: CASE MANAGER OVERVIEW (Supervisor view, or PM drilled into an office) ---------- */
+/* ---------- LAYER 1B: TEAM OVERVIEW (Supervisor view, or PM/Admin drilled into an office) ---------- */
 async function renderCMOverview(office){
   destroyTeamCharts();
   const el=document.getElementById('teamContent');
   el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading team data…</div>';
 
   try{
-    const { data: users } = await sb.from('profiles').select('*').eq('office', office).eq('role','case_manager').eq('active', true);
+    // Every active user in the office shows up here, not just case_manager role —
+    // supervisors/PMs/admins who carry a personal caseload show up too.
+    const { data: users } = await sb.from('profiles').select('*').eq('office', office).eq('active', true);
     const cmList = users || [];
 
     const weekAgo = addDays(todayISO(),-6);
@@ -1077,10 +1079,12 @@ async function renderCMOverview(office){
     }
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
+    const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
+    const roleChipBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
 
     el.innerHTML = `
       ${backBtn}
-      <h2 class="sec">${esc(office)} — Case Manager Activity</h2>
+      <h2 class="sec">${esc(office)} — Team Activity</h2>
       <p class="sec-note">Click a name to see their detailed contact history.</p>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1088,11 +1092,14 @@ async function renderCMOverview(office){
       </div>
 
       <div style="display:grid;gap:10px">
-        ${stats.length===0?'<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">No case managers found for this office yet.</div>':stats.map(s=>{
+        ${stats.length===0?'<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">No active users found for this office yet.</div>':stats.map(s=>{
           const successRate = s.totalAttempts>0 ? Math.round((s.madeContact/s.totalAttempts)*100) : 0;
           return `<div onclick="drillIntoUser('${s.user.id}','${esc(s.user.full_name||s.user.email)}','${office}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--line);border-left:5px solid ${s.overdue>0?'var(--red)':'var(--green)'};border-radius:10px;padding:14px 18px;box-shadow:var(--shadow-card)">
             <div style="flex:1">
-              <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:var(--navy)">${esc(s.user.full_name||s.user.email)}</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:var(--navy)">${esc(s.user.full_name||s.user.email)}</span>
+                <span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px;background:${roleChipBg[s.user.role]||'#f1f5f9'};color:${roleChipColors[s.user.role]||'#334155'}">${roleLabel(s.user.role)}</span>
+              </div>
               <div style="font-size:11px;color:var(--gray);margin-top:2px">${s.active} active · ${s.totalAttempts} total contact attempts</div>
             </div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:var(--blue)">${s.contactsWeek}</div><div style="font-size:10px;color:var(--gray)">This Week</div></div>
