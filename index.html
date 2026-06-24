@@ -1058,9 +1058,12 @@ async function renderCMOverview(office){
 
     const weekAgo = addDays(todayISO(),-6);
     const stats = [];
+    let officeCases = [];
+    let officeLogs = [];
     for(const u of cmList){
       const { data: cs } = await sb.from('cases').select('*').eq('user_id', u.id);
       const allCases = cs || [];
+      officeCases = officeCases.concat(allCases);
       const active = allCases.filter(c=>['outreach','intake','open'].includes(c.status));
       const overdue = active.filter(c=>{
         if(c.status!=='outreach') return false;
@@ -1069,14 +1072,28 @@ async function renderCMOverview(office){
       const idList = allCases.map(c=>c.id);
       let contactsThisWeek = 0, madeContact = 0, totalAttempts = 0;
       if(idList.length>0){
-        const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).gte('date', weekAgo);
-        contactsThisWeek = (logsData||[]).length;
         const { data: allLogsData } = await sb.from('contact_logs').select('*').in('case_id', idList);
-        totalAttempts = (allLogsData||[]).length;
-        madeContact = (allLogsData||[]).filter(l=>l.result==='Made contact').length;
+        const userLogs = allLogsData || [];
+        officeLogs = officeLogs.concat(userLogs);
+        contactsThisWeek = userLogs.filter(l=>l.date>=weekAgo).length;
+        totalAttempts = userLogs.length;
+        madeContact = userLogs.filter(l=>l.result==='Made contact').length;
       }
       stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
     }
+
+    // office-wide aggregates — same shape as the individual drill-down charts
+    const totalAttemptsOffice = officeLogs.length;
+    const madeContactOffice = officeLogs.filter(l=>l.result==='Made contact').length;
+    const noAnswerOffice = officeLogs.filter(l=>l.result==='No answer').length;
+    const leftMessageOffice = officeLogs.filter(l=>l.result==='Left message').length;
+    const successRateOffice = totalAttemptsOffice>0 ? Math.round((madeContactOffice/totalAttemptsOffice)*100) : 0;
+
+    const days = lastNDays(21);
+    const dailyCounts = days.map(d=>officeLogs.filter(l=>l.date===d).length);
+
+    const statusCounts = {};
+    officeCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
@@ -1085,12 +1102,31 @@ async function renderCMOverview(office){
     el.innerHTML = `
       ${backBtn}
       <h2 class="sec">${esc(office)} — Team Activity</h2>
-      <p class="sec-note">Click a name to see their detailed contact history.</p>
+      <p class="sec-note">Office-wide totals. Click a name below to focus on just their data.</p>
 
-      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
-        <canvas id="cmChart" height="90"></canvas>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Total Attempts', totalAttemptsOffice, 'var(--navy)')}
+        ${miniStat('Made Contact', madeContactOffice, 'var(--green)')}
+        ${miniStat('No Answer', noAnswerOffice, 'var(--red)')}
+        ${miniStat('Left Message', leftMessageOffice, 'var(--amber)')}
+        ${miniStat('Success Rate', successRateOffice+'%', 'var(--blue)')}
+        ${miniStat('Active Cases', officeCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
       </div>
 
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="dailyVolumeChart" height="80"></canvas>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+          <canvas id="resultBreakdownChart" height="200"></canvas>
+        </div>
+        <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+          <canvas id="statusBreakdownChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Team Member</div>
       <div style="display:grid;gap:10px">
         ${stats.length===0?'<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">No active users found for this office yet.</div>':stats.map(s=>{
           const successRate = s.totalAttempts>0 ? Math.round((s.madeContact/s.totalAttempts)*100) : 0;
@@ -1110,24 +1146,60 @@ async function renderCMOverview(office){
       </div>
     `;
 
-    const ctx = document.getElementById('cmChart');
-    if(ctx && stats.length>0){
-      const chart = new Chart(ctx, {
-        type: 'bar',
+    const dailyCtx = document.getElementById('dailyVolumeChart');
+    if(dailyCtx){
+      const chart = new Chart(dailyCtx, {
+        type: 'line',
         data: {
-          labels: stats.map(s=>s.user.full_name||s.user.email.split('@')[0]),
+          labels: days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})),
           datasets: [{
-            label: 'Contacts This Week',
-            data: stats.map(s=>s.contactsWeek),
-            backgroundColor: '#0077c8',
-            borderRadius: 6,
-            maxBarThickness: 50
+            label: 'Contacts Logged',
+            data: dailyCounts,
+            borderColor: '#0077c8',
+            backgroundColor: 'rgba(0,119,200,.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3
           }]
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false }, title: { display: true, text: 'Contacts Logged This Week by Case Manager', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(office)} — Last 21 Days`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const resultCtx = document.getElementById('resultBreakdownChart');
+    if(resultCtx){
+      const chart = new Chart(resultCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Made Contact','No Answer','Left Message'],
+          datasets: [{ data: [madeContactOffice, noAnswerOffice, leftMessageOffice], backgroundColor: ['#166534','#dc2626','#b45309'] }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Contact Result Breakdown', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const statusCtx = document.getElementById('statusBreakdownChart');
+    if(statusCtx){
+      const labels = Object.keys(statusCounts);
+      const colorMap = {outreach:'#b45309',intake:'#0077c8',open:'#166534',completed:'#64748b',closed:'#64748b',declined:'#991b1b'};
+      const chart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+          labels: labels.map(l=>l.charAt(0).toUpperCase()+l.slice(1)),
+          datasets: [{ data: labels.map(l=>statusCounts[l]), backgroundColor: labels.map(l=>colorMap[l]||'#64748b') }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
         }
       });
       teamChartInstances.push(chart);
