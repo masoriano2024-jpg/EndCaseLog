@@ -1213,8 +1213,12 @@ async function renderCMOverview(office){
     const statusCounts = {};
     officeCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
-    const sevenDaysAgo = addDays(todayISO(),-6);
-    const closedLast7Office = officeCases.filter(c=>c.closed && c.closed>=sevenDaysAgo).length;
+    // Daily activity per status, same 21-day window as Daily Contact Volume —
+    // counts cases that transitioned INTO each stage on that specific day.
+    const preOpenedDaily = days.map(d=>officeCases.filter(c=>c.started===d).length);
+    const pendingDaily = days.map(d=>officeCases.filter(c=>c.intakeStart===d).length);
+    const activeDaily = days.map(d=>officeCases.filter(c=>c.openedAt===d).length);
+    const closedDaily = days.map(d=>officeCases.filter(c=>c.closed===d).length);
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
@@ -1238,11 +1242,15 @@ async function renderCMOverview(office){
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
-        ${miniStat('Closed — Last 7 Days', closedLast7Office, 'var(--red)')}
+        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
         <canvas id="dailyVolumeChart" height="80"></canvas>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="statusTrendChart" height="80"></canvas>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
@@ -1293,6 +1301,29 @@ async function renderCMOverview(office){
         options: {
           responsive: true,
           plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(office)} — Last 21 Days`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const trendCtx = document.getElementById('statusTrendChart');
+    if(trendCtx){
+      const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      const chart = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: trendLabels,
+          datasets: [
+            { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+            { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+            { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(office)} — Last 21 Days`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1672,8 +1703,12 @@ async function drillIntoUser(userId, userName, office){
     const statusCounts = {};
     allCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
-    const sevenDaysAgo = addDays(todayISO(),-6);
-    const closedLast7 = allCases.filter(c=>c.closed && c.closed>=sevenDaysAgo).length;
+    // Daily activity per status, same 21-day window as Daily Contact Volume —
+    // counts cases that transitioned INTO each stage on that specific day.
+    const preOpenedDaily = days.map(d=>allCases.filter(c=>c.started===d).length);
+    const pendingDaily = days.map(d=>allCases.filter(c=>c.intakeStart===d).length);
+    const activeDaily = days.map(d=>allCases.filter(c=>c.openedAt===d).length);
+    const closedDaily = days.map(d=>allCases.filter(c=>c.closed===d).length);
 
     const backBtn = isPM()||isAdmin()
       ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
@@ -1697,11 +1732,15 @@ async function drillIntoUser(userId, userName, office){
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
-        ${miniStat('Closed — Last 7 Days', closedLast7, 'var(--red)')}
+        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
         <canvas id="dailyVolumeChart" height="80"></canvas>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="statusTrendChart" height="80"></canvas>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -1738,6 +1777,29 @@ async function drillIntoUser(userId, userName, office){
         options: {
           responsive: true,
           plugins: { legend: { display: false }, title: { display: true, text: 'Daily Contact Volume — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const trendCtx = document.getElementById('statusTrendChart');
+    if(trendCtx){
+      const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      const chart = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: trendLabels,
+          datasets: [
+            { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+            { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+            { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: 'Case Status Activity — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
