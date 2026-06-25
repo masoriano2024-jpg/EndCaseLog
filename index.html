@@ -1085,11 +1085,14 @@ async function renderOfficeOverview(){
 
   const offices=['Kerrville','San Angelo','Austin'];
   const officeStats={};
+  let allOrgCases = [];
+  let allOrgLogs = [];
 
   try{
     for(const office of offices){
       const { data: cs } = await sb.from('cases').select('*').eq('office', office);
       const allCases = cs || [];
+      allOrgCases = allOrgCases.concat(allCases);
       const active = allCases.filter(c=>['outreach','intake','open'].includes(c.status));
       const overdue = active.filter(c=>{
         if(c.status!=='outreach') return false;
@@ -1097,27 +1100,74 @@ async function renderOfficeOverview(){
         return dd < todayISO();
       });
       const weekAgo = addDays(todayISO(),-6);
-      const { data: officeCaseIds } = await sb.from('cases').select('id').eq('office', office);
-      const idList=(officeCaseIds||[]).map(c=>c.id);
+      const idList = allCases.map(c=>c.id);
       let contactsThisWeek=0;
       if(idList.length>0){
-        const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).gte('date', weekAgo);
-        contactsThisWeek = (logsData||[]).length;
+        const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList);
+        const officeLogsAll = logsData || [];
+        allOrgLogs = allOrgLogs.concat(officeLogsAll);
+        contactsThisWeek = officeLogsAll.filter(l=>l.date>=weekAgo).length;
       }
       officeStats[office] = { active: active.length, overdue: overdue.length, contacts: contactsThisWeek, total: allCases.length };
     }
   }catch(e){ console.error('office overview load failed', e); }
 
-  const maxContacts = Math.max(1, ...offices.map(o=>officeStats[o]?.contacts||0));
+  // org-wide aggregates — same shape as the office-level and individual drill-down charts
+  const totalAttemptsOrg = allOrgLogs.length;
+  const madeContactOrg = allOrgLogs.filter(l=>l.result==='Made contact').length;
+  const noAnswerOrg = allOrgLogs.filter(l=>l.result==='No answer').length;
+  const leftMessageOrg = allOrgLogs.filter(l=>l.result==='Left message').length;
+  const successRateOrg = totalAttemptsOrg>0 ? Math.round((madeContactOrg/totalAttemptsOrg)*100) : 0;
+
+  const days = lastNDays(21);
+  const dailyCounts = days.map(d=>allOrgLogs.filter(l=>l.date===d).length);
+
+  const statusCounts = {};
+  allOrgCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
+
+  const preOpenedDaily = days.map(d=>allOrgCases.filter(c=>c.started===d).length);
+  const pendingDaily = days.map(d=>allOrgCases.filter(c=>c.intake_start===d).length);
+  const activeDaily = days.map(d=>allOrgCases.filter(c=>c.opened_at===d).length);
+  const closedDaily = days.map(d=>allOrgCases.filter(c=>c.closed===d).length);
 
   el.innerHTML = `
     <h2 class="sec">Office Overview</h2>
-    <p class="sec-note">Click an office to see its case managers.</p>
+    <p class="sec-note">Org-wide totals across all offices. Click an office below to see its team.</p>
 
-    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
-      <canvas id="officeChart" height="90"></canvas>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+      ${miniStat('Total Attempts', totalAttemptsOrg, 'var(--navy)')}
+      ${miniStat('Made Contact', madeContactOrg, 'var(--green)')}
+      ${miniStat('No Answer', noAnswerOrg, 'var(--red)')}
+      ${miniStat('Left Message', leftMessageOrg, 'var(--amber)')}
+      ${miniStat('Success Rate', successRateOrg+'%', 'var(--blue)')}
+      ${miniStat('Total Caseload', allOrgCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
     </div>
 
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+      ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
+      ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
+      ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+      ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+    </div>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+      <canvas id="dailyVolumeChart" height="80"></canvas>
+    </div>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+      <canvas id="statusTrendChart" height="80"></canvas>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+        <canvas id="resultBreakdownChart" height="200"></canvas>
+      </div>
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
+        <canvas id="statusBreakdownChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Office</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
       ${offices.map(o=>{
         const s=officeStats[o]||{active:0,overdue:0,contacts:0,total:0};
@@ -1133,24 +1183,83 @@ async function renderOfficeOverview(){
     </div>
   `;
 
-  const ctx = document.getElementById('officeChart');
-  if(ctx){
-    const chart = new Chart(ctx, {
-      type: 'bar',
+  const dailyCtx = document.getElementById('dailyVolumeChart');
+  if(dailyCtx){
+    const chart = new Chart(dailyCtx, {
+      type: 'line',
       data: {
-        labels: offices,
+        labels: days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})),
         datasets: [{
-          label: 'Contacts Logged (Last 7 Days)',
-          data: offices.map(o=>officeStats[o]?.contacts||0),
-          backgroundColor: '#0077c8',
-          borderRadius: 6,
-          maxBarThickness: 60
+          label: 'Contacts Logged',
+          data: dailyCounts,
+          borderColor: '#0077c8',
+          backgroundColor: 'rgba(0,119,200,.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3
         }]
       },
       options: {
         responsive: true,
-        plugins: { legend: { display: false }, title: { display: true, text: 'Contacts Logged by Office — Last 7 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        plugins: { legend: { display: false }, title: { display: true, text: 'Daily Contact Volume — All Offices — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+
+  const trendCtx = document.getElementById('statusTrendChart');
+  if(trendCtx){
+    const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    const chart = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: trendLabels,
+        datasets: [
+          { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+          { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+          { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+          { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: 'Case Status Activity — All Offices — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+
+  const resultCtx = document.getElementById('resultBreakdownChart');
+  if(resultCtx){
+    const chart = new Chart(resultCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Made Contact','No Answer','Left Message'],
+        datasets: [{ data: [madeContactOrg, noAnswerOrg, leftMessageOrg], backgroundColor: ['#166534','#dc2626','#b45309'] }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Contact Result Breakdown', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+
+  const statusCtx = document.getElementById('statusBreakdownChart');
+  if(statusCtx){
+    const labels = Object.keys(statusCounts);
+    const colorMap = {outreach:'#b45309',intake:'#0077c8',open:'#166534',completed:'#64748b',closed:'#64748b',declined:'#991b1b'};
+    const chart = new Chart(statusCtx, {
+      type: 'doughnut',
+      data: {
+        labels: labels.map(statusLabel),
+        datasets: [{ data: labels.map(l=>statusCounts[l]), backgroundColor: labels.map(l=>colorMap[l]||'#64748b') }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
       }
     });
     teamChartInstances.push(chart);
@@ -1216,8 +1325,8 @@ async function renderCMOverview(office){
     // Daily activity per status, same 21-day window as Daily Contact Volume —
     // counts cases that transitioned INTO each stage on that specific day.
     const preOpenedDaily = days.map(d=>officeCases.filter(c=>c.started===d).length);
-    const pendingDaily = days.map(d=>officeCases.filter(c=>c.intakeStart===d).length);
-    const activeDaily = days.map(d=>officeCases.filter(c=>c.openedAt===d).length);
+    const pendingDaily = days.map(d=>officeCases.filter(c=>c.intake_start===d).length);
+    const activeDaily = days.map(d=>officeCases.filter(c=>c.opened_at===d).length);
     const closedDaily = days.map(d=>officeCases.filter(c=>c.closed===d).length);
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
