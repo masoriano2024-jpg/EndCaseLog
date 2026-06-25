@@ -1213,6 +1213,9 @@ async function renderCMOverview(office){
     const statusCounts = {};
     officeCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
+    const sevenDaysAgo = addDays(todayISO(),-6);
+    const closedLast7Office = officeCases.filter(c=>c.closed && c.closed>=sevenDaysAgo).length;
+
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
     const roleChipBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
@@ -1228,7 +1231,14 @@ async function renderCMOverview(office){
         ${miniStat('No Answer', noAnswerOffice, 'var(--red)')}
         ${miniStat('Left Message', leftMessageOffice, 'var(--amber)')}
         ${miniStat('Success Rate', successRateOffice+'%', 'var(--blue)')}
-        ${miniStat('Active Cases', officeCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+        ${miniStat('Total Caseload', officeCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+        ${miniStat('Closed — Last 7 Days', closedLast7Office, 'var(--red)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1312,7 +1322,7 @@ async function renderCMOverview(office){
       const chart = new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-          labels: labels.map(l=>l.charAt(0).toUpperCase()+l.slice(1)),
+          labels: labels.map(statusLabel),
           datasets: [{ data: labels.map(l=>statusCounts[l]), backgroundColor: labels.map(l=>colorMap[l]||'#64748b') }]
         },
         options: {
@@ -1373,7 +1383,7 @@ function renderReadOnlyCard(c){
   if(c.status==='open'){
     return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag open">Open Case</span></span>
+        <div><span class="case-id">#${c.id}<span class="tag open">Active</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
       </div>
@@ -1390,7 +1400,7 @@ function renderReadOnlyCard(c){
     const total=steps.length;
     return `<div class="case-card intake" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag intake">Intake</span></span>
+        <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip green">In progress</span>
       </div>
@@ -1414,7 +1424,7 @@ function renderReadOnlyCard(c){
   const steps=stepsFor(c);const total=steps.length;
   return `<div class="case-card ${cls}" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
     <div class="case-head">
-      <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
+      <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span>
         ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
       <span class="due-chip ${chip}">${chiptxt}</span>
     </div>
@@ -1480,7 +1490,7 @@ async function openTeamClientProfile(id){
     const statusColor=c.status==='outreach'?'var(--amber)':c.status==='intake'?'var(--blue)':c.status==='open'?'var(--green)':'var(--gray-light)';
     caseHtml=`
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
-        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</div><div class="profile-stat-lbl">Status</div></div>
+        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${statusLabel(c.status)}</div><div class="profile-stat-lbl">Status</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
       </div>
@@ -1662,6 +1672,9 @@ async function drillIntoUser(userId, userName, office){
     const statusCounts = {};
     allCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
+    const sevenDaysAgo = addDays(todayISO(),-6);
+    const closedLast7 = allCases.filter(c=>c.closed && c.closed>=sevenDaysAgo).length;
+
     const backBtn = isPM()||isAdmin()
       ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
       : `<button class="btn sm ghost" onclick="renderCMOverview(currentProfile.office)" style="margin-bottom:14px">← Team Overview</button>`;
@@ -1677,7 +1690,14 @@ async function drillIntoUser(userId, userName, office){
         ${miniStat('No Answer', noAnswer, 'var(--red)')}
         ${miniStat('Left Message', leftMessage, 'var(--amber)')}
         ${miniStat('Success Rate', successRate+'%', 'var(--blue)')}
-        ${miniStat('Active Cases', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+        ${miniStat('Total Caseload', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+        ${miniStat('Closed — Last 7 Days', closedLast7, 'var(--red)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1747,7 +1767,7 @@ async function drillIntoUser(userId, userName, office){
       const chart = new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-          labels: labels.map(l=>l.charAt(0).toUpperCase()+l.slice(1)),
+          labels: labels.map(statusLabel),
           datasets: [{ data: labels.map(l=>statusCounts[l]), backgroundColor: labels.map(l=>colorMap[l]||'#64748b') }]
         },
         options: {
@@ -2147,10 +2167,10 @@ async function renderBriefing(){
 
       <!-- STAT ROW -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:0;border-bottom:1px solid var(--line)">
-        ${briefingStat('Active Cases',active.length,'var(--navy)')}
-        ${briefingStat('In Outreach',outreachCases.length,'var(--amber)')}
-        ${briefingStat('In Intake',intakeCases.length,'var(--blue)')}
-        ${briefingStat('Open Cases',openCases.length,'var(--green)')}
+        ${briefingStat('Total Caseload',active.length,'var(--navy)')}
+        ${briefingStat('Pre-Opened',outreachCases.length,'var(--amber)')}
+        ${briefingStat('Pending',intakeCases.length,'var(--blue)')}
+        ${briefingStat('Active',openCases.length,'var(--green)')}
         ${briefingStat('Due/Overdue',totalDue,totalDue>0?'var(--red)':'var(--green)')}
         ${briefingStat('Logged Today',loggedToday,'var(--gray)')}
       </div>
@@ -2168,14 +2188,14 @@ async function renderBriefing(){
       <!-- STEP BREAKDOWN -->
       ${outreachCases.length>0?`
       <div style="padding:12px 16px;border-top:1px solid var(--line)">
-        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Outreach Step Breakdown</div>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Pre-Opened Step Breakdown</div>
         ${stepHtml}
       </div>`:''}
 
       <!-- INTAKE SNAPSHOT -->
       ${intakeCases.length>0?`
       <div style="padding:12px 16px;border-top:1px solid var(--line)">
-        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Intake in Progress</div>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:8px">Pending Cases In Progress</div>
         ${intakeCases.map(c=>{
           const steps=stepsFor(c);
           const pct=Math.round((c.step/(steps.length-1))*100);
@@ -2221,7 +2241,7 @@ function renderDash(){
     if(c.status==='open'){
       return `<div class="case-card open">
         <div class="case-head">
-          <div><span class="case-id">#${c.id}<span class="tag open">Open Case</span></span>
+          <div><span class="case-id">#${c.id}<span class="tag open">Active</span></span>
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
           <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
         </div>
@@ -2241,7 +2261,7 @@ function renderDash(){
       const lastStep=c.step===total-1;
       return `<div class="case-card intake">
         <div class="case-head">
-          <div><span class="case-id">#${c.id}<span class="tag intake">Intake</span></span>
+          <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span>
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
           <span class="due-chip green">In progress</span>
         </div>
@@ -2270,7 +2290,7 @@ function renderDash(){
     const steps=stepsFor(c);const total=steps.length;
     return `<div class="case-card ${cls}">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag outreach">Outreach</span></span>
+        <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
@@ -2289,6 +2309,12 @@ function renderDash(){
   }).join('');
 }
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+// Display-only labels — the underlying status values (outreach/intake/open/etc.)
+// never change in the database, RLS, or sorting logic. This only renames what's shown.
+function statusLabel(status){
+  const map={ outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
+  return map[status] || (status ? status.charAt(0).toUpperCase()+status.slice(1) : '—');
+}
 
 /* ---------- CASE ACTIONS ---------- */
 function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';document.getElementById('newName').value='';show('startModal')}
@@ -2409,7 +2435,7 @@ function renderRoster(){
     return `<div class="roster-line${isActive?' active-row':''}" onclick="openClientProfile(${id})" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy)">#${id}</span>
-        <span style="font-size:11px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:.3px">${st}</span>
+        <span style="font-size:11px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:.3px">${statusLabel(st)}</span>
       </div>
       <div class="mini">${roster[id]?esc(roster[id]):'<i>no name stored</i>'} · ${cnt} log${cnt!==1?'s':''}</div>
     </div>`;
@@ -2441,7 +2467,7 @@ async function openClientProfile(id, silent=false){
     const statusColor=c.status==='outreach'?'var(--amber)':c.status==='intake'?'var(--blue)':c.status==='open'?'var(--green)':'var(--gray-light)';
     caseHtml=`
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
-        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</div><div class="profile-stat-lbl">Status</div></div>
+        <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${statusLabel(c.status)}</div><div class="profile-stat-lbl">Status</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
       </div>
@@ -2597,7 +2623,7 @@ function renderWeekStats(wedISO){
     statCard('Contacts Attempted',totalAttempts,'all logged this week','var(--blue)')+
     statCard('Successful Contacts',successCount,'made contact with survivor','var(--green)')+
     statCard('New Cases This Week',newCases,'assigned','var(--blue-light)')+
-    statCard('Pending Cases',pending,'outreach + intake','var(--amber)')+
+    statCard('Pre-Opened + Pending',pending,'outreach + intake combined','var(--amber)')+
     statCard('Closed This Week',closedThisWeek,'resolved or no contact','var(--gray)')+
     statCard('Total Active Caseload',activeCaseload,'all open cases','var(--navy)');
 }
