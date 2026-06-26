@@ -1058,6 +1058,57 @@ async function addTicketNote(id){
 let teamChartInstances = [];
 let teamDrillOffice = null; // for PM drilling into an office
 let teamDrillUser = null;   // drilling into a specific case manager
+let teamRangeStart = null;  // custom date range for Team tab timelines — null means "use default window"
+let teamRangeEnd = null;
+let teamCurrentView = { type:'org' }; // tracks which Team screen is active so date-range changes re-render the right one
+
+function getTeamDays(){
+  if(teamRangeStart && teamRangeEnd && teamRangeStart<=teamRangeEnd){
+    const out=[]; let d=new Date(teamRangeStart+'T00:00:00'); const end=new Date(teamRangeEnd+'T00:00:00');
+    while(d<=end){ out.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+    return out;
+  }
+  return lastNDays(21);
+}
+function teamRangeLabel(){
+  const days=getTeamDays();
+  if(days.length===0) return '';
+  const f=d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  return `${f(days[0])} – ${f(days[days.length-1])}`;
+}
+function dateRangeControlsHtml(){
+  const days=getTeamDays();
+  return `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:16px">
+      <span style="font-size:11px;font-weight:700;color:var(--gray);font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">Date Range</span>
+      <input type="date" id="teamRangeStartInput" value="${days[0]}" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12px;font-family:'Open Sans',sans-serif">
+      <span style="color:var(--gray-light);font-size:12px">to</span>
+      <input type="date" id="teamRangeEndInput" value="${days[days.length-1]}" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12px;font-family:'Open Sans',sans-serif">
+      <button class="btn sm gold" onclick="applyTeamRange()">Apply</button>
+      <span style="flex:1"></span>
+      <button class="btn sm ghost" onclick="setTeamPreset(7)">Last 7</button>
+      <button class="btn sm ghost" onclick="setTeamPreset(21)">Last 21</button>
+      <button class="btn sm ghost" onclick="setTeamPreset(30)">Last 30</button>
+      <button class="btn sm ghost" onclick="setTeamPreset(90)">Last 90</button>
+    </div>`;
+}
+function applyTeamRange(){
+  const s=document.getElementById('teamRangeStartInput').value;
+  const e=document.getElementById('teamRangeEndInput').value;
+  if(!s||!e||s>e){ alert('Pick a valid start and end date (start must be before end).'); return; }
+  teamRangeStart=s; teamRangeEnd=e;
+  rerenderTeamView();
+}
+function setTeamPreset(n){
+  const days=lastNDays(n);
+  teamRangeStart=days[0]; teamRangeEnd=days[days.length-1];
+  rerenderTeamView();
+}
+function rerenderTeamView(){
+  if(teamCurrentView.type==='org') renderOfficeOverview();
+  else if(teamCurrentView.type==='office') renderCMOverview(teamCurrentView.office);
+  else if(teamCurrentView.type==='user') drillIntoUser(teamCurrentView.userId, teamCurrentView.userName, teamCurrentView.office);
+}
 
 function destroyTeamCharts(){
   teamChartInstances.forEach(c=>{ try{c.destroy();}catch(e){} });
@@ -1073,8 +1124,8 @@ function lastNDays(n){
 async function loadTeamView(){
   teamDrillOffice = null;
   teamDrillUser = null;
-  if(isPM() || isAdmin()) await renderOfficeOverview();
-  else if(isSupervisor()) await renderCMOverview(currentProfile.office);
+  if(isPM() || isAdmin()){ teamCurrentView = { type:'org' }; await renderOfficeOverview(); }
+  else if(isSupervisor()){ teamCurrentView = { type:'office', office:currentProfile.office }; await renderCMOverview(currentProfile.office); }
 }
 
 /* ---------- LAYER 1A: PROGRAM MANAGER — OFFICE OVERVIEW ---------- */
@@ -1112,14 +1163,17 @@ async function renderOfficeOverview(){
     }
   }catch(e){ console.error('office overview load failed', e); }
 
-  // org-wide aggregates — same shape as the office-level and individual drill-down charts
-  const totalAttemptsOrg = allOrgLogs.length;
-  const madeContactOrg = allOrgLogs.filter(l=>l.result==='Made contact').length;
-  const noAnswerOrg = allOrgLogs.filter(l=>l.result==='No answer').length;
-  const leftMessageOrg = allOrgLogs.filter(l=>l.result==='Left message').length;
+  teamCurrentView = { type:'org' };
+
+  // org-wide aggregates, scoped to the selected date range
+  const days = getTeamDays();
+  const rangeLogsOrg = allOrgLogs.filter(l=>days.includes(l.date));
+  const totalAttemptsOrg = rangeLogsOrg.length;
+  const madeContactOrg = rangeLogsOrg.filter(l=>l.result==='Made contact').length;
+  const noAnswerOrg = rangeLogsOrg.filter(l=>l.result==='No answer').length;
+  const leftMessageOrg = rangeLogsOrg.filter(l=>l.result==='Left message').length;
   const successRateOrg = totalAttemptsOrg>0 ? Math.round((madeContactOrg/totalAttemptsOrg)*100) : 0;
 
-  const days = lastNDays(21);
   const dailyCounts = days.map(d=>allOrgLogs.filter(l=>l.date===d).length);
 
   const statusCounts = {};
@@ -1130,12 +1184,29 @@ async function renderOfficeOverview(){
   const activeDaily = days.map(d=>allOrgCases.filter(c=>c.opened_at===d).length);
   const closedDaily = days.map(d=>allOrgCases.filter(c=>c.closed===d).length);
 
+  // Closed-before-Active breakdown, scoped to range — uses existing timestamps,
+  // no extra tracking needed: never reaching opened_at means it never went Active;
+  // never reaching intake_start means it closed straight out of Pre-Opened.
+  const closedInRangeOrg = allOrgCases.filter(c=>c.closed && days.includes(c.closed));
+  const closedBeforeActiveOrg = closedInRangeOrg.filter(c=>!c.opened_at).length;
+  const closedPreOpenedOrg = closedInRangeOrg.filter(c=>!c.opened_at && !c.intake_start).length;
+
+  // Survivor (never completed intake) vs Client (completed intake at some point) contact comparison
+  const survivorIdsOrg = new Set(allOrgCases.filter(c=>!c.opened_at).map(c=>c.id));
+  const clientIdsOrg = new Set(allOrgCases.filter(c=>c.opened_at).map(c=>c.id));
+  const survivorAttemptsOrg = rangeLogsOrg.filter(l=>survivorIdsOrg.has(l.id)).length;
+  const survivorMadeOrg = rangeLogsOrg.filter(l=>survivorIdsOrg.has(l.id)&&l.result==='Made contact').length;
+  const clientAttemptsOrg = rangeLogsOrg.filter(l=>clientIdsOrg.has(l.id)).length;
+  const clientMadeOrg = rangeLogsOrg.filter(l=>clientIdsOrg.has(l.id)&&l.result==='Made contact').length;
+
   el.innerHTML = `
     <h2 class="sec">Office Overview</h2>
     <p class="sec-note">Org-wide totals across all offices. Click an office below to see its team.</p>
 
+    ${dateRangeControlsHtml()}
+
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Total Attempts', totalAttemptsOrg, 'var(--navy)')}
+      ${miniStat('Attempts (Range)', totalAttemptsOrg, 'var(--navy)')}
       ${miniStat('Made Contact', madeContactOrg, 'var(--green)')}
       ${miniStat('No Answer', noAnswerOrg, 'var(--red)')}
       ${miniStat('Left Message', leftMessageOrg, 'var(--amber)')}
@@ -1148,6 +1219,11 @@ async function renderOfficeOverview(){
       ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
       ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
       ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
+      ${miniStat('Closed Before Active (Range)', closedBeforeActiveOrg, 'var(--red)')}
+      ${miniStat('Closed While Pre-Opened (Range)', closedPreOpenedOrg, 'var(--amber)')}
     </div>
 
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1165,6 +1241,11 @@ async function renderOfficeOverview(){
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
         <canvas id="statusBreakdownChart" height="200"></canvas>
       </div>
+    </div>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:24px">
+      <canvas id="survivorClientChart" height="110"></canvas>
+      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
     </div>
 
     <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Office</div>
@@ -1201,7 +1282,7 @@ async function renderOfficeOverview(){
       },
       options: {
         responsive: true,
-        plugins: { legend: { display: false }, title: { display: true, text: 'Daily Contact Volume — All Offices — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — All Offices — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -1224,7 +1305,7 @@ async function renderOfficeOverview(){
       },
       options: {
         responsive: true,
-        plugins: { legend: { position:'bottom' }, title: { display: true, text: 'Case Status Activity — All Offices — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — All Offices — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -1260,6 +1341,26 @@ async function renderOfficeOverview(){
       options: {
         responsive: true,
         plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+
+  const survClientCtx = document.getElementById('survivorClientChart');
+  if(survClientCtx){
+    const chart = new Chart(survClientCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Survivors (Pre-Intake)','Clients (Post-Intake)'],
+        datasets: [
+          { label:'Attempted', data:[survivorAttemptsOrg, clientAttemptsOrg], backgroundColor:'#94a3b8', borderRadius:6, maxBarThickness:70 },
+          { label:'Made Contact', data:[survivorMadeOrg, clientMadeOrg], backgroundColor:'#166534', borderRadius:6, maxBarThickness:70 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
     teamChartInstances.push(chart);
@@ -1309,25 +1410,41 @@ async function renderCMOverview(office){
       stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
     }
 
-    // office-wide aggregates — same shape as the individual drill-down charts
-    const totalAttemptsOffice = officeLogs.length;
-    const madeContactOffice = officeLogs.filter(l=>l.result==='Made contact').length;
-    const noAnswerOffice = officeLogs.filter(l=>l.result==='No answer').length;
-    const leftMessageOffice = officeLogs.filter(l=>l.result==='Left message').length;
+    teamCurrentView = { type:'office', office };
+
+    // office-wide aggregates, scoped to the selected date range
+    const days = getTeamDays();
+    const rangeLogsOffice = officeLogs.filter(l=>days.includes(l.date));
+    const totalAttemptsOffice = rangeLogsOffice.length;
+    const madeContactOffice = rangeLogsOffice.filter(l=>l.result==='Made contact').length;
+    const noAnswerOffice = rangeLogsOffice.filter(l=>l.result==='No answer').length;
+    const leftMessageOffice = rangeLogsOffice.filter(l=>l.result==='Left message').length;
     const successRateOffice = totalAttemptsOffice>0 ? Math.round((madeContactOffice/totalAttemptsOffice)*100) : 0;
 
-    const days = lastNDays(21);
     const dailyCounts = days.map(d=>officeLogs.filter(l=>l.date===d).length);
 
     const statusCounts = {};
     officeCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
-    // Daily activity per status, same 21-day window as Daily Contact Volume —
+    // Daily activity per status, same window as Daily Contact Volume —
     // counts cases that transitioned INTO each stage on that specific day.
     const preOpenedDaily = days.map(d=>officeCases.filter(c=>c.started===d).length);
     const pendingDaily = days.map(d=>officeCases.filter(c=>c.intake_start===d).length);
     const activeDaily = days.map(d=>officeCases.filter(c=>c.opened_at===d).length);
     const closedDaily = days.map(d=>officeCases.filter(c=>c.closed===d).length);
+
+    // Closed-before-Active breakdown, scoped to range
+    const closedInRangeOffice = officeCases.filter(c=>c.closed && days.includes(c.closed));
+    const closedBeforeActiveOffice = closedInRangeOffice.filter(c=>!c.opened_at).length;
+    const closedPreOpenedOffice = closedInRangeOffice.filter(c=>!c.opened_at && !c.intake_start).length;
+
+    // Survivor vs Client contact comparison
+    const survivorIdsOffice = new Set(officeCases.filter(c=>!c.opened_at).map(c=>c.id));
+    const clientIdsOffice = new Set(officeCases.filter(c=>c.opened_at).map(c=>c.id));
+    const survivorAttemptsOffice = rangeLogsOffice.filter(l=>survivorIdsOffice.has(l.id)).length;
+    const survivorMadeOffice = rangeLogsOffice.filter(l=>survivorIdsOffice.has(l.id)&&l.result==='Made contact').length;
+    const clientAttemptsOffice = rangeLogsOffice.filter(l=>clientIdsOffice.has(l.id)).length;
+    const clientMadeOffice = rangeLogsOffice.filter(l=>clientIdsOffice.has(l.id)&&l.result==='Made contact').length;
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
@@ -1338,8 +1455,10 @@ async function renderCMOverview(office){
       <h2 class="sec">${esc(office)} — Team Activity</h2>
       <p class="sec-note">Office-wide totals. Click a name below to focus on just their data.</p>
 
+      ${dateRangeControlsHtml()}
+
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Total Attempts', totalAttemptsOffice, 'var(--navy)')}
+        ${miniStat('Attempts (Range)', totalAttemptsOffice, 'var(--navy)')}
         ${miniStat('Made Contact', madeContactOffice, 'var(--green)')}
         ${miniStat('No Answer', noAnswerOffice, 'var(--red)')}
         ${miniStat('Left Message', leftMessageOffice, 'var(--amber)')}
@@ -1352,6 +1471,11 @@ async function renderCMOverview(office){
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Closed Before Active (Range)', closedBeforeActiveOffice, 'var(--red)')}
+        ${miniStat('Closed While Pre-Opened (Range)', closedPreOpenedOffice, 'var(--amber)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1369,6 +1493,11 @@ async function renderCMOverview(office){
         <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
           <canvas id="statusBreakdownChart" height="200"></canvas>
         </div>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:24px">
+        <canvas id="survivorClientChart" height="110"></canvas>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
       </div>
 
       <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Team Member</div>
@@ -1409,7 +1538,7 @@ async function renderCMOverview(office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(office)} — Last 21 Days`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1432,7 +1561,7 @@ async function renderCMOverview(office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(office)} — Last 21 Days`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1468,6 +1597,26 @@ async function renderCMOverview(office){
         options: {
           responsive: true,
           plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const survClientCtx = document.getElementById('survivorClientChart');
+    if(survClientCtx){
+      const chart = new Chart(survClientCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Survivors (Pre-Intake)','Clients (Post-Intake)'],
+          datasets: [
+            { label:'Attempted', data:[survivorAttemptsOffice, clientAttemptsOffice], backgroundColor:'#94a3b8', borderRadius:6, maxBarThickness:70 },
+            { label:'Made Contact', data:[survivorMadeOffice, clientMadeOffice], backgroundColor:'#166534', borderRadius:6, maxBarThickness:70 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
       teamChartInstances.push(chart);
@@ -1777,6 +1926,7 @@ async function renderTeamClientTodos(caseId){
 /* ---------- LAYER 2: INDIVIDUAL CASE MANAGER DRILL-DOWN ---------- */
 async function drillIntoUser(userId, userName, office){
   teamDrillUser = userId;
+  teamCurrentView = { type:'user', userId, userName, office };
   destroyTeamCharts();
   const el=document.getElementById('teamContent');
   el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading…</div>';
@@ -1799,25 +1949,38 @@ async function drillIntoUser(userId, userName, office){
       allLogs = logsData || [];
     }
 
-    const totalAttempts = allLogs.length;
-    const madeContact = allLogs.filter(l=>l.result==='Made contact').length;
-    const noAnswer = allLogs.filter(l=>l.result==='No answer').length;
-    const leftMessage = allLogs.filter(l=>l.result==='Left message').length;
+    const days = getTeamDays();
+    const rangeLogs = allLogs.filter(l=>days.includes(l.date));
+    const totalAttempts = rangeLogs.length;
+    const madeContact = rangeLogs.filter(l=>l.result==='Made contact').length;
+    const noAnswer = rangeLogs.filter(l=>l.result==='No answer').length;
+    const leftMessage = rangeLogs.filter(l=>l.result==='Left message').length;
     const successRate = totalAttempts>0 ? Math.round((madeContact/totalAttempts)*100) : 0;
 
-    // daily volume for last 21 days
-    const days = lastNDays(21);
     const dailyCounts = days.map(d=>allLogs.filter(l=>l.date===d).length);
 
     const statusCounts = {};
     allCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
 
-    // Daily activity per status, same 21-day window as Daily Contact Volume —
+    // Daily activity per status, same window as Daily Contact Volume —
     // counts cases that transitioned INTO each stage on that specific day.
     const preOpenedDaily = days.map(d=>allCases.filter(c=>c.started===d).length);
     const pendingDaily = days.map(d=>allCases.filter(c=>c.intakeStart===d).length);
     const activeDaily = days.map(d=>allCases.filter(c=>c.openedAt===d).length);
     const closedDaily = days.map(d=>allCases.filter(c=>c.closed===d).length);
+
+    // Closed-before-Active breakdown, scoped to range
+    const closedInRange = allCases.filter(c=>c.closed && days.includes(c.closed));
+    const closedBeforeActive = closedInRange.filter(c=>!c.openedAt).length;
+    const closedPreOpened = closedInRange.filter(c=>!c.openedAt && !c.intakeStart).length;
+
+    // Survivor vs Client contact comparison
+    const survivorIds = new Set(allCases.filter(c=>!c.openedAt).map(c=>c.id));
+    const clientIds = new Set(allCases.filter(c=>c.openedAt).map(c=>c.id));
+    const survivorAttempts = rangeLogs.filter(l=>survivorIds.has(l.id)).length;
+    const survivorMade = rangeLogs.filter(l=>survivorIds.has(l.id)&&l.result==='Made contact').length;
+    const clientAttempts = rangeLogs.filter(l=>clientIds.has(l.id)).length;
+    const clientMade = rangeLogs.filter(l=>clientIds.has(l.id)&&l.result==='Made contact').length;
 
     const backBtn = isPM()||isAdmin()
       ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
@@ -1828,8 +1991,10 @@ async function drillIntoUser(userId, userName, office){
       <h2 class="sec">${esc(userName)}</h2>
       <p class="sec-note">${esc(office)} · Contact activity & caseload detail</p>
 
+      ${dateRangeControlsHtml()}
+
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Total Attempts', totalAttempts, 'var(--navy)')}
+        ${miniStat('Attempts (Range)', totalAttempts, 'var(--navy)')}
         ${miniStat('Made Contact', madeContact, 'var(--green)')}
         ${miniStat('No Answer', noAnswer, 'var(--red)')}
         ${miniStat('Left Message', leftMessage, 'var(--amber)')}
@@ -1842,6 +2007,11 @@ async function drillIntoUser(userId, userName, office){
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
+        ${miniStat('Closed Before Active (Range)', closedBeforeActive, 'var(--red)')}
+        ${miniStat('Closed While Pre-Opened (Range)', closedPreOpened, 'var(--amber)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1859,6 +2029,11 @@ async function drillIntoUser(userId, userName, office){
         <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px">
           <canvas id="statusBreakdownChart" height="200"></canvas>
         </div>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-top:20px">
+        <canvas id="survivorClientChart" height="110"></canvas>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
       </div>
 
       <div style="margin-top:24px">
@@ -1885,7 +2060,7 @@ async function drillIntoUser(userId, userName, office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false }, title: { display: true, text: 'Daily Contact Volume — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1908,7 +2083,7 @@ async function drillIntoUser(userId, userName, office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: 'Case Status Activity — Last 21 Days', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1944,6 +2119,26 @@ async function drillIntoUser(userId, userName, office){
         options: {
           responsive: true,
           plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Caseload by Status', font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const survClientCtx = document.getElementById('survivorClientChart');
+    if(survClientCtx){
+      const chart = new Chart(survClientCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Survivors (Pre-Intake)','Clients (Post-Intake)'],
+          datasets: [
+            { label:'Attempted', data:[survivorAttempts, clientAttempts], backgroundColor:'#94a3b8', borderRadius:6, maxBarThickness:70 },
+            { label:'Made Contact', data:[survivorMade, clientMade], backgroundColor:'#166534', borderRadius:6, maxBarThickness:70 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
       teamChartInstances.push(chart);
