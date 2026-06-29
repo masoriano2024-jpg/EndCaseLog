@@ -1120,6 +1120,16 @@ function lastNDays(n){
   for(let i=n-1;i>=0;i--) days.push(addDays(todayISO(),-i));
   return days;
 }
+// Classifies a single contact log as a "client" (post-intake) contact.
+// Logs created after stage_at_log tracking began carry their own ground-truth stage —
+// use that first. Older logs fall back to the case's current intake-completion state,
+// which is an approximation (it can't see what the case's stage was back when the
+// call happened), but it's the best available signal for anything logged before this.
+function logIsClient(l, clientIdsFallback){
+  if(l.stage_at_log){ return l.stage_at_log==='open' || l.stage_at_log==='completed'; }
+  if(l.stage){ return l.stage==='open' || l.stage==='completed'; }
+  return clientIdsFallback.has(l.id);
+}
 
 async function loadTeamView(){
   teamDrillOffice = null;
@@ -1191,13 +1201,13 @@ async function renderOfficeOverview(){
   const closedBeforeActiveOrg = closedInRangeOrg.filter(c=>!c.opened_at).length;
   const closedPreOpenedOrg = closedInRangeOrg.filter(c=>!c.opened_at && !c.intake_start).length;
 
-  // Survivor (never completed intake) vs Client (completed intake at some point) contact comparison
-  const survivorIdsOrg = new Set(allOrgCases.filter(c=>!c.opened_at).map(c=>c.id));
+  // Survivor (never completed intake) vs Client (completed intake at some point) contact comparison.
+  // Prefers each log's own recorded stage; falls back to current case status for older logs.
   const clientIdsOrg = new Set(allOrgCases.filter(c=>c.opened_at).map(c=>c.id));
-  const survivorAttemptsOrg = rangeLogsOrg.filter(l=>survivorIdsOrg.has(l.id)).length;
-  const survivorMadeOrg = rangeLogsOrg.filter(l=>survivorIdsOrg.has(l.id)&&l.result==='Made contact').length;
-  const clientAttemptsOrg = rangeLogsOrg.filter(l=>clientIdsOrg.has(l.id)).length;
-  const clientMadeOrg = rangeLogsOrg.filter(l=>clientIdsOrg.has(l.id)&&l.result==='Made contact').length;
+  const clientAttemptsOrg = rangeLogsOrg.filter(l=>logIsClient(l, clientIdsOrg)).length;
+  const clientMadeOrg = rangeLogsOrg.filter(l=>logIsClient(l, clientIdsOrg)&&l.result==='Made contact').length;
+  const survivorAttemptsOrg = totalAttemptsOrg - clientAttemptsOrg;
+  const survivorMadeOrg = madeContactOrg - clientMadeOrg;
 
   el.innerHTML = `
     <h2 class="sec">Office Overview</h2>
@@ -1245,7 +1255,7 @@ async function renderOfficeOverview(){
 
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:24px">
       <canvas id="survivorClientChart" height="110"></canvas>
-      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
+      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Each contact is classified by the case's actual stage at the moment it was logged. Older contacts (logged before this tracking began) fall back to an estimate based on the case's status today.</p>
     </div>
 
     <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Office</div>
@@ -1438,13 +1448,12 @@ async function renderCMOverview(office){
     const closedBeforeActiveOffice = closedInRangeOffice.filter(c=>!c.opened_at).length;
     const closedPreOpenedOffice = closedInRangeOffice.filter(c=>!c.opened_at && !c.intake_start).length;
 
-    // Survivor vs Client contact comparison
-    const survivorIdsOffice = new Set(officeCases.filter(c=>!c.opened_at).map(c=>c.id));
+    // Survivor vs Client contact comparison — prefers each log's own recorded stage
     const clientIdsOffice = new Set(officeCases.filter(c=>c.opened_at).map(c=>c.id));
-    const survivorAttemptsOffice = rangeLogsOffice.filter(l=>survivorIdsOffice.has(l.id)).length;
-    const survivorMadeOffice = rangeLogsOffice.filter(l=>survivorIdsOffice.has(l.id)&&l.result==='Made contact').length;
-    const clientAttemptsOffice = rangeLogsOffice.filter(l=>clientIdsOffice.has(l.id)).length;
-    const clientMadeOffice = rangeLogsOffice.filter(l=>clientIdsOffice.has(l.id)&&l.result==='Made contact').length;
+    const clientAttemptsOffice = rangeLogsOffice.filter(l=>logIsClient(l, clientIdsOffice)).length;
+    const clientMadeOffice = rangeLogsOffice.filter(l=>logIsClient(l, clientIdsOffice)&&l.result==='Made contact').length;
+    const survivorAttemptsOffice = totalAttemptsOffice - clientAttemptsOffice;
+    const survivorMadeOffice = madeContactOffice - clientMadeOffice;
 
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
@@ -1497,7 +1506,7 @@ async function renderCMOverview(office){
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:24px">
         <canvas id="survivorClientChart" height="110"></canvas>
-        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Each contact is classified by the case's actual stage at the moment it was logged. Older contacts (logged before this tracking began) fall back to an estimate based on the case's status today.</p>
       </div>
 
       <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Team Member</div>
@@ -1974,13 +1983,12 @@ async function drillIntoUser(userId, userName, office){
     const closedBeforeActive = closedInRange.filter(c=>!c.openedAt).length;
     const closedPreOpened = closedInRange.filter(c=>!c.openedAt && !c.intakeStart).length;
 
-    // Survivor vs Client contact comparison
-    const survivorIds = new Set(allCases.filter(c=>!c.openedAt).map(c=>c.id));
+    // Survivor vs Client contact comparison — prefers each log's own recorded stage
     const clientIds = new Set(allCases.filter(c=>c.openedAt).map(c=>c.id));
-    const survivorAttempts = rangeLogs.filter(l=>survivorIds.has(l.id)).length;
-    const survivorMade = rangeLogs.filter(l=>survivorIds.has(l.id)&&l.result==='Made contact').length;
-    const clientAttempts = rangeLogs.filter(l=>clientIds.has(l.id)).length;
-    const clientMade = rangeLogs.filter(l=>clientIds.has(l.id)&&l.result==='Made contact').length;
+    const clientAttempts = rangeLogs.filter(l=>logIsClient(l, clientIds)).length;
+    const clientMade = rangeLogs.filter(l=>logIsClient(l, clientIds)&&l.result==='Made contact').length;
+    const survivorAttempts = totalAttempts - clientAttempts;
+    const survivorMade = madeContact - clientMade;
 
     const backBtn = isPM()||isAdmin()
       ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
@@ -2033,7 +2041,7 @@ async function drillIntoUser(userId, userName, office){
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-top:20px">
         <canvas id="survivorClientChart" height="110"></canvas>
-        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Survivor = case has never completed intake (current or past). Client = case has completed intake at some point, regardless of current status.</p>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">Each contact is classified by the case's actual stage at the moment it was logged. Older contacts (logged before this tracking began) fall back to an estimate based on the case's status today.</p>
       </div>
 
       <div style="margin-top:24px">
@@ -2256,7 +2264,7 @@ async function load(){
     if(lErr) throw lErr;
     logs=(lData||[]).map(r=>({
       id:r.case_id, method:r.method, date:r.date, time:r.time,
-      result:r.result, notes:r.notes, _dbId:r.id
+      result:r.result, notes:r.notes, stage:r.stage_at_log, _dbId:r.id
     }));
 
     // roster
@@ -2327,7 +2335,8 @@ async function saveLogEntry(entry){
   try{
     const {data,error}=await sb.from('contact_logs').insert({
       case_id:entry.id, method:entry.method, date:entry.date,
-      time:entry.time||null, result:entry.result, notes:entry.notes||null
+      time:entry.time||null, result:entry.result, notes:entry.notes||null,
+      stage_at_log:entry.stage||null
     }).select().single();
     if(error) throw error;
     entry._dbId=data.id;
@@ -2763,7 +2772,12 @@ function saveLog(){
   const method=document.querySelector('input[name=method]:checked').value;
   const notes=document.getElementById('logNotes').value.trim();
   const time=document.getElementById('logTime').value||'';
-  const entry={id,method,date:document.getElementById('logDate').value||todayISO(),time,result:document.getElementById('logResult').value,notes};
+  // Stamp the case's stage right now, at the moment this contact happens — this is what
+  // lets future reporting split "survivor" vs "client" contacts accurately over time,
+  // instead of guessing backward from whatever the case's status is today.
+  const caseNow=cases.find(c=>c.id===id);
+  const stageAtLog=caseNow?caseNow.status:null;
+  const entry={id,method,date:document.getElementById('logDate').value||todayISO(),time,result:document.getElementById('logResult').value,notes,stage:stageAtLog};
   logs.push(entry);
   document.getElementById('logNotes').value='';
   document.getElementById('logResult').selectedIndex=0;
