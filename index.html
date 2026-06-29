@@ -1199,7 +1199,7 @@ async function renderOfficeOverview(){
   // never reaching intake_start means it closed straight out of Pre-Opened.
   const closedInRangeOrg = allOrgCases.filter(c=>c.closed && days.includes(c.closed));
   const closedBeforeActiveOrg = closedInRangeOrg.filter(c=>!c.opened_at).length;
-  const closedPreOpenedOrg = closedInRangeOrg.filter(c=>!c.opened_at && !c.intake_start).length;
+  const closedAfterActiveOrg = closedInRangeOrg.filter(c=>!!c.opened_at).length;
 
   // Survivor (never completed intake) vs Client (completed intake at some point) contact comparison.
   // Prefers each log's own recorded stage; falls back to current case status for older logs.
@@ -1232,8 +1232,8 @@ async function renderOfficeOverview(){
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Closed Before Active (Range)', closedBeforeActiveOrg, 'var(--red)')}
-      ${miniStat('Closed While Pre-Opened (Range)', closedPreOpenedOrg, 'var(--amber)')}
+      ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOrg, 'var(--red)')}
+      ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOrg, 'var(--green)')}
     </div>
 
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1446,7 +1446,7 @@ async function renderCMOverview(office){
     // Closed-before-Active breakdown, scoped to range
     const closedInRangeOffice = officeCases.filter(c=>c.closed && days.includes(c.closed));
     const closedBeforeActiveOffice = closedInRangeOffice.filter(c=>!c.opened_at).length;
-    const closedPreOpenedOffice = closedInRangeOffice.filter(c=>!c.opened_at && !c.intake_start).length;
+    const closedAfterActiveOffice = closedInRangeOffice.filter(c=>!!c.opened_at).length;
 
     // Survivor vs Client contact comparison — prefers each log's own recorded stage
     const clientIdsOffice = new Set(officeCases.filter(c=>c.opened_at).map(c=>c.id));
@@ -1483,8 +1483,8 @@ async function renderCMOverview(office){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Closed Before Active (Range)', closedBeforeActiveOffice, 'var(--red)')}
-        ${miniStat('Closed While Pre-Opened (Range)', closedPreOpenedOffice, 'var(--amber)')}
+        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOffice, 'var(--red)')}
+        ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOffice, 'var(--green)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1981,7 +1981,7 @@ async function drillIntoUser(userId, userName, office){
     // Closed-before-Active breakdown, scoped to range
     const closedInRange = allCases.filter(c=>c.closed && days.includes(c.closed));
     const closedBeforeActive = closedInRange.filter(c=>!c.openedAt).length;
-    const closedPreOpened = closedInRange.filter(c=>!c.openedAt && !c.intakeStart).length;
+    const closedAfterActive = closedInRange.filter(c=>!!c.openedAt).length;
 
     // Survivor vs Client contact comparison — prefers each log's own recorded stage
     const clientIds = new Set(allCases.filter(c=>c.openedAt).map(c=>c.id));
@@ -2018,8 +2018,8 @@ async function drillIntoUser(userId, userName, office){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Closed Before Active (Range)', closedBeforeActive, 'var(--red)')}
-        ${miniStat('Closed While Pre-Opened (Range)', closedPreOpened, 'var(--amber)')}
+        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)')}
+        ${miniStat('Closed After Intake Done (Range)', closedAfterActive, 'var(--green)')}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
