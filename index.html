@@ -587,6 +587,10 @@
               <option value="Austin">Austin</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+            <input type="checkbox" id="newUserActive" style="width:16px;height:16px">
+            <label for="newUserActive" style="font-size:12px;color:var(--gray);font-family:'Open Sans',sans-serif">Activate immediately (leave unchecked to build the account now and turn on access later)</label>
+          </div>
           <button class="btn gold" onclick="createUser()" style="width:100%;margin-top:4px">Create Account</button>
           <div id="createUserMsg" style="font-size:12px;font-weight:700;min-height:16px;text-align:center"></div>
         </div>
@@ -834,6 +838,19 @@ async function bootApp(user){
   const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
   currentProfile = profile;
 
+  // Inactive accounts (pre-launch builds, offboarded staff) get signed right back out.
+  // This is the actual access gate — the admin "Deactivate" toggle now has real teeth.
+  if(profile && profile.active === false){
+    await sb.auth.signOut();
+    currentUser = null;
+    currentProfile = null;
+    document.getElementById('appShell').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    const errEl = document.getElementById('loginError');
+    if(errEl) errEl.textContent = 'This account is not active yet. Contact your administrator.';
+    return;
+  }
+
   // show app, hide login
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
@@ -870,6 +887,7 @@ async function createUser(){
   const password = document.getElementById('newUserPassword').value.trim();
   const role = document.getElementById('newUserRole').value;
   const office = document.getElementById('newUserOffice').value;
+  const activateNow = document.getElementById('newUserActive').checked;
   const msg = document.getElementById('createUserMsg');
   msg.textContent = '';
 
@@ -896,15 +914,16 @@ async function createUser(){
         full_name: name,
         role,
         office,
-        active: true
+        active: activateNow
       });
     }
 
     msg.style.color='var(--green)';
-    msg.textContent=`✓ Account created for ${name}`;
+    msg.textContent = activateNow ? `✓ Account created and active for ${name}` : `✓ Account built for ${name} — not active yet`;
     document.getElementById('newUserName').value='';
     document.getElementById('newUserEmail').value='';
     document.getElementById('newUserPassword').value='';
+    document.getElementById('newUserActive').checked=false;
     loadAdminUsers();
   }catch(e){
     msg.style.color='var(--red)';
