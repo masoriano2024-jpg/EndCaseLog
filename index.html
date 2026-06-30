@@ -2139,7 +2139,10 @@ async function flagCaseForReview(caseId, currentlyFlagged){
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
 function renderReadOnlyCard(c){
   if(c.status==='open'){
-    const pathCDone = c.pathCStep >= PATH_C.length;
+    const pathCSteps = stepsFor(c);
+    const stepC = c.pathCStep || 0;
+    const pathCDone = stepC >= pathCSteps.length;
+    const pathCLabel = pathCDone ? `All ${pathCSteps.length} step(s) complete ✓` : `Step ${stepC+1} of ${pathCSteps.length}: ${pathCSteps[stepC]?.t||''}`;
     return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -2150,8 +2153,8 @@ function renderReadOnlyCard(c){
         <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
       </div>
       ${flagBadge(c)}
-      <div class="case-step">Path C: ${pathCDone?'<span style="color:var(--green)">✓ Recovery plan uploaded to TCR</span>':'Recovery plan pending upload to TCR'}</div>
-      <div class="progress" style="margin-bottom:6px"><i style="width:${pathCDone?100:0}%"></i></div>
+      <div class="case-step">Path C: <span style="color:${pathCDone?'var(--green)':'var(--navy)'}">${esc(pathCLabel)}</span></div>
+      <div class="progress" style="margin-bottom:6px"><i style="width:${pathCDone?100:pathCSteps.length>1?(stepC/(pathCSteps.length-1))*100:0}%"></i></div>
       <div class="case-actions">
         <span style="flex:1"></span>
         <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
@@ -2440,7 +2443,7 @@ async function drillIntoUser(userId, userName, office, mode){
 
     // Path C metrics — only Active cases
     const activeCases = allCases.filter(c=>c.status==='open');
-    const pathCComplete = activeCases.filter(c=>c.pathCStep >= PATH_C.length).length;
+    const pathCComplete = activeCases.filter(c=>(c.pathCStep||0) >= PATH_C.length).length;
     const pathCPct = activeCases.length > 0 ? Math.round((pathCComplete/activeCases.length)*100) : 0;
 
     // Tier breakdown across all Active cases
@@ -2694,10 +2697,11 @@ const INTAKE_DEFAULT = [
 let OUTREACH = OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:undefined}));
 let INTAKE = INTAKE_DEFAULT.map(s=>({...s}));
 
-// Path C — runs on Active (open) cases. Starts with 1 step; designed to grow.
-const PATH_C = [
+// Path C — Active case checklist. Starts with 1 step; fully editable like A and B.
+const PATH_C_DEFAULT = [
   { t: "Recovery plan uploaded to TCR" }
 ];
+let PATH_C = PATH_C_DEFAULT.map(s=>({...s}));
 
 const TIER_COLORS = { 1:'#7c3aed', 2:'#0077c8', 3:'#166534', 4:'#92400e' };
 const TIER_BG    = { 1:'#ede9fe', 2:'#dbeafe', 3:'#dcfce7', 4:'#fef3c7' };
@@ -2792,8 +2796,10 @@ async function load(){
     if(tData&&tData.length>0){
       const outRows=tData.filter(r=>r.path==='outreach');
       const inRows=tData.filter(r=>r.path==='intake');
+      const pathCRows=tData.filter(r=>r.path==='path_c');
       if(outRows.length>0) OUTREACH=outRows.map(r=>({t:r.label,offset:r.offset_type?{type:r.offset_type,n:r.offset_n}:{type:'start'}}));
       if(inRows.length>0) INTAKE=inRows.map(r=>({t:r.label}));
+      if(pathCRows.length>0) PATH_C=pathCRows.map(r=>({t:r.label}));
     }
 
     // weekly
@@ -2870,15 +2876,15 @@ async function saveLogEntry(entry){
 async function saveTemplates(){
   localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
   localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
+  localStorage.setItem('path_c_tpl', JSON.stringify(PATH_C));
   syncStart();
   try{
-    // delete ALL existing template rows first
     const {error:delErr}=await sb.from('step_templates').delete().gte('position',0);
     if(delErr) throw delErr;
-    // then insert the current set
     const rows=[
       ...OUTREACH.map((s,i)=>({path:'outreach',position:i,label:s.t,offset_type:s.offset?s.offset.type:null,offset_n:s.offset?.n||null})),
-      ...INTAKE.map((s,i)=>({path:'intake',position:i,label:s.t,offset_type:null,offset_n:null}))
+      ...INTAKE.map((s,i)=>({path:'intake',position:i,label:s.t,offset_type:null,offset_n:null})),
+      ...PATH_C.map((s,i)=>({path:'path_c',position:i,label:s.t,offset_type:null,offset_n:null}))
     ];
     const {error:insErr}=await sb.from('step_templates').insert(rows);
     if(insErr) throw insErr;
@@ -2919,10 +2925,19 @@ function save(){
   // (fine for single-user; full sync handled by individual saveCase calls)
 }
 function stepsFor(c){
-  const path=c.status==='intake'?'intake':(c.status==='outreach'?'outreach':null);
-  if(!path) return c.status==='open'?INTAKE:OUTREACH;
-  if(c.customSteps&&c.customSteps[path]) return c.customSteps[path];
-  return path==='outreach'?OUTREACH:INTAKE;
+  if(c.status==='outreach'){
+    if(c.customSteps&&c.customSteps.outreach) return c.customSteps.outreach;
+    return OUTREACH;
+  }
+  if(c.status==='intake'){
+    if(c.customSteps&&c.customSteps.intake) return c.customSteps.intake;
+    return INTAKE;
+  }
+  if(c.status==='open'){
+    if(c.customSteps&&c.customSteps.path_c) return c.customSteps.path_c;
+    return PATH_C;
+  }
+  return OUTREACH;
 }
 
 /* ---------- DATE HELPERS ---------- */
@@ -3135,8 +3150,11 @@ function renderDash(){
   });
   list.innerHTML=active.map(c=>{
     if(c.status==='open'){
-      const pathCDone = c.pathCStep >= PATH_C.length;
-      const pathCLabel = pathCDone ? '✓ Recovery plan uploaded to TCR' : PATH_C[c.pathCStep]?.t || '';
+      const pathCSteps = stepsFor(c);
+      const totalC = pathCSteps.length;
+      const stepC = c.pathCStep || 0;
+      const pathCDone = stepC >= totalC;
+      const lastStepC = stepC === totalC - 1;
       return `<div class="case-card open">
         <div class="case-head">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -3147,15 +3165,16 @@ function renderDash(){
           <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
         </div>
         ${flagBadge(c)}
-        <div class="case-step" style="margin-bottom:6px">
-          <b>Path C</b> — Step ${Math.min(c.pathCStep+1,PATH_C.length)} of ${PATH_C.length}:
-          <span style="color:${pathCDone?'var(--green)':'var(--navy)'}">${pathCLabel}</span>
+        <div class="case-step">
+          ${pathCDone
+            ? `<b>Path C</b> — <span style="color:var(--green)">✓ All ${totalC} step(s) complete</span>`
+            : `<b>Path C</b> — Step ${stepC+1} of ${totalC}: <b>${esc(pathCSteps[stepC]?.t||'')}</b>`}
         </div>
-        <div class="progress" style="margin-bottom:10px"><i style="width:${pathCDone?100:0}%"></i></div>
+        <div class="progress" style="margin-bottom:10px"><i style="width:${pathCDone?100:totalC>1?(stepC/(totalC-1))*100:0}%"></i></div>
         <div class="case-actions">
           <button class="btn sm ghost" onclick="reopenIntake(${c.id})" title="Move back to intake">← Back to Intake</button>
           <span style="flex:1"></span>
-          ${!pathCDone ? `<button class="btn sm gold" onclick="advancePathC(${c.id})">✓ Upload Recovery Plan</button>` : ''}
+          ${!pathCDone ? `<button class="btn sm gold" onclick="advancePathC(${c.id})">${lastStepC?'✓ Complete Path C':'Next Step →'}</button>` : ''}
           <button class="btn sm green" onclick="closeOpenCase(${c.id})">Close Case ✓</button>
           <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
         </div>
@@ -3309,7 +3328,7 @@ async function statDrill(statusFilter, titleText, scopeOffice){
         const steps = c.status==='outreach' ? (c.custom_steps?.outreach||null) : (c.status==='intake' ? (c.custom_steps?.intake||null) : null);
         const stepArr = steps || (c.status==='outreach' ? OUTREACH : c.status==='intake' ? INTAKE : PATH_C);
         const stepLabel = c.status==='open'
-          ? (c.path_c_step >= PATH_C.length ? 'Path C complete ✓' : `Path C: ${PATH_C[c.path_c_step]?.t||''}`)
+          ? ((c.path_c_step||0) >= PATH_C.length ? 'Path C complete ✓' : `Path C Step ${(c.path_c_step||0)+1} of ${PATH_C.length}: ${PATH_C[c.path_c_step||0]?.t||''}`)
           : c.status==='outreach'||c.status==='intake'
             ? `Step ${(c.step||0)+1} of ${stepArr.length}: ${stepArr[c.step||0]?.t||'—'}`
             : '—';
@@ -3334,9 +3353,11 @@ async function statDrill(statusFilter, titleText, scopeOffice){
 
 function advancePathC(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
-  if(c.pathCStep >= PATH_C.length) return;
-  if(!confirm(`Mark "${PATH_C[c.pathCStep].t}" as complete?`))return;
-  c.pathCStep = (c.pathCStep||0) + 1;
+  const steps=stepsFor(c);
+  const stepC=c.pathCStep||0;
+  if(stepC>=steps.length) return;
+  if(!confirm(`Mark "${steps[stepC].t}" as complete?`))return;
+  c.pathCStep = stepC + 1;
   saveCase(c); renderAll();
 }
 function closeOpenCase(id){
@@ -3714,7 +3735,8 @@ function parseOffset(v){
 function renderSteps(){
   const el=document.getElementById('stepsRef');
   el.innerHTML=renderPathEditor('outreach',OUTREACH,'Path A · No Contact','outreach')+
-    renderPathEditor('intake',INTAKE,'Path B · Intake','intake');
+    renderPathEditor('intake',INTAKE,'Path B · Intake','intake')+
+    renderPathEditor('path_c',PATH_C,'Path C · Active Case','path_c');
 }
 
 function renderPathEditor(key,steps,title,cls){
@@ -3755,18 +3777,21 @@ function renderPathEditor(key,steps,title,cls){
   </details>`;
 }
 
+function getPathArr(path){ return path==='outreach'?OUTREACH:path==='intake'?INTAKE:PATH_C; }
+function setPathArr(path,arr){ if(path==='outreach') OUTREACH=arr; else if(path==='intake') INTAKE=arr; else PATH_C=arr; }
+
 function updateStepLabel(path,idx,val){
-  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const arr=getPathArr(path);
   arr[idx].t=val;
   saveTemplates();
 }
 function updateStepOffset(path,idx,val){
-  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const arr=getPathArr(path);
   arr[idx].offset=parseOffset(val);
   saveTemplates();
 }
 function moveStep(path,idx,dir){
-  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const arr=getPathArr(path);
   const ni=idx+dir;
   if(ni<0||ni>=arr.length)return;
   [arr[idx],arr[ni]]=[arr[ni],arr[idx]];
@@ -3774,25 +3799,27 @@ function moveStep(path,idx,dir){
 }
 function deleteStep(path,idx){
   if(!confirm('Delete this step from the global template?'))return;
-  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const arr=getPathArr(path);
   arr.splice(idx,1);
+  setPathArr(path,arr);
   saveTemplates();renderSteps();
 }
 function addStep(path){
-  const arr=path==='outreach'?OUTREACH:INTAKE;
+  const arr=getPathArr(path);
   const newStep=path==='outreach'?{t:'New step',offset:{type:'cal',n:1}}:{t:'New step'};
   arr.push(newStep);
   saveTemplates();renderSteps();
-  // focus new input
   setTimeout(()=>{
     const rows=document.querySelectorAll(`.step-row[data-path="${path}"]`);
     if(rows.length){const inp=rows[rows.length-1].querySelector('.step-input');if(inp){inp.focus();inp.select();}}
   },50);
 }
 function resetPath(path){
-  if(!confirm(`Reset Path ${path==='outreach'?'A (No Contact)':'B (Intake)'} to the original defaults? This cannot be undone.`))return;
+  const label = path==='outreach'?'A (No Contact)':path==='intake'?'B (Intake)':'C (Active Case)';
+  if(!confirm(`Reset Path ${label} to the original defaults? This cannot be undone.`))return;
   if(path==='outreach') OUTREACH=OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:undefined}));
-  else INTAKE=INTAKE_DEFAULT.map(s=>({...s}));
+  else if(path==='intake') INTAKE=INTAKE_DEFAULT.map(s=>({...s}));
+  else PATH_C=PATH_C_DEFAULT.map(s=>({...s}));
   saveTemplates();renderSteps();
 }
 
