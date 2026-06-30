@@ -748,6 +748,32 @@
   </div>
 </div>
 
+<!-- TIER PICKER — shown when a case transitions to Active -->
+<div class="modal-bg" id="tierModal">
+  <div class="modal">
+    <h3>Assign Case Tier</h3>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">This case is now Active. Select the tier before continuing — it can be viewed in reporting but cannot be changed after it's set.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <button onclick="confirmTier(1)" style="padding:18px 10px;border:2px solid #ede9fe;border-radius:10px;background:#ede9fe;color:#7c3aed;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 1</button>
+      <button onclick="confirmTier(2)" style="padding:18px 10px;border:2px solid #dbeafe;border-radius:10px;background:#dbeafe;color:#0077c8;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 2</button>
+      <button onclick="confirmTier(3)" style="padding:18px 10px;border:2px solid #dcfce7;border-radius:10px;background:#dcfce7;color:#166534;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 3</button>
+      <button onclick="confirmTier(4)" style="padding:18px 10px;border:2px solid #fef3c7;border-radius:10px;background:#fef3c7;color:#92400e;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 4</button>
+    </div>
+    <button class="btn ghost" style="width:100%" onclick="closeModal('tierModal')">Cancel</button>
+  </div>
+</div>
+
+<!-- STATUS DRILL-DOWN PANEL — interactive stat card details -->
+<div class="modal-bg" id="statDrillModal">
+  <div class="modal" style="max-width:640px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 id="statDrillTitle" style="margin:0">Cases</h3>
+      <button class="btn sm ghost" onclick="closeModal('statDrillModal')">✕ Close</button>
+    </div>
+    <div id="statDrillList"></div>
+  </div>
+</div>
+
 <script>
 /* ---------- SUPABASE INIT ---------- */
 const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
@@ -1632,9 +1658,9 @@ async function renderOfficeOverview(){
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
-      ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
-      ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+      ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — All Offices',null)")}
+      ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — All Offices',null)")}
+      ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — All Offices',null)")}
       ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
     </div>
 
@@ -1908,9 +1934,9 @@ async function renderTeamOverview(scope){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
-        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('outreach','Pre-Opened — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('intake','Pending — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)', `statDrill('open','Active — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
       </div>
 
@@ -2113,14 +2139,19 @@ async function flagCaseForReview(caseId, currentlyFlagged){
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
 function renderReadOnlyCard(c){
   if(c.status==='open'){
+    const pathCDone = c.pathCStep >= PATH_C.length;
     return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag open">Active</span></span>
-          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="case-id">#${c.id}<span class="tag open">Active</span></span>
+          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
+          ${tierBadge(c.tier)}
+        </div>
         <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
       </div>
       ${flagBadge(c)}
-      <div class="case-step">Intake complete. Survivor is an active open case.</div>
+      <div class="case-step">Path C: ${pathCDone?'<span style="color:var(--green)">✓ Recovery plan uploaded to TCR</span>':'Recovery plan pending upload to TCR'}</div>
+      <div class="progress" style="margin-bottom:6px"><i style="width:${pathCDone?100:0}%"></i></div>
       <div class="case-actions">
         <span style="flex:1"></span>
         <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
@@ -2382,7 +2413,8 @@ async function drillIntoUser(userId, userName, office, mode){
       started:r.started, closed:r.closed, intakeStart:r.intake_start,
       openedAt:r.opened_at, customSteps:r.custom_steps||null,
       flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
-      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null
+      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
+      tier:r.tier||null, pathCStep:r.path_c_step||0
     }));
     const idList = allCases.map(c=>c.id);
     teamDrillUserCases = allCases;
@@ -2405,6 +2437,15 @@ async function drillIntoUser(userId, userName, office, mode){
 
     const statusCounts = {};
     allCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
+
+    // Path C metrics — only Active cases
+    const activeCases = allCases.filter(c=>c.status==='open');
+    const pathCComplete = activeCases.filter(c=>c.pathCStep >= PATH_C.length).length;
+    const pathCPct = activeCases.length > 0 ? Math.round((pathCComplete/activeCases.length)*100) : 0;
+
+    // Tier breakdown across all Active cases
+    const tierCounts = {1:0,2:0,3:0,4:0};
+    activeCases.forEach(c=>{ if(c.tier && tierCounts[c.tier]!==undefined) tierCounts[c.tier]++; });
 
     // Daily activity per status, same window as Daily Contact Volume —
     // counts cases that transitioned INTO each stage on that specific day.
@@ -2448,11 +2489,31 @@ async function drillIntoUser(userId, userName, office, mode){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)')}
-        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)')}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)')}
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — My Team',null)")}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — My Team',null)")}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — My Team',null)")}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
       </div>
+
+      ${activeCases.length > 0 ? `
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:16px 20px;margin-bottom:20px">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Path C — Recovery Plan Progress</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+          ${miniStat('Active Cases', activeCases.length, 'var(--navy)')}
+          ${miniStat('Path C Complete', pathCComplete, 'var(--green)')}
+          ${miniStat('Recovery Plan %', pathCPct+'%', pathCPct===100?'var(--green)':pathCPct>50?'var(--blue)':'var(--amber)')}
+        </div>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:16px 20px;margin-bottom:20px">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Tier Breakdown — Active Cases</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          ${[1,2,3,4].map(t=>`<div style="text-align:center;padding:12px 6px;border-radius:8px;background:${TIER_BG[t]};border:1px solid ${TIER_COLORS[t]}33">
+            <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:${TIER_COLORS[t]}">${tierCounts[t]}</div>
+            <div style="font-size:10px;font-weight:700;font-family:'Montserrat',sans-serif;color:${TIER_COLORS[t]};margin-top:2px;text-transform:uppercase">Tier ${t}</div>
+          </div>`).join('')}
+        </div>
+      </div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
         ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)')}
@@ -2595,10 +2656,11 @@ async function drillIntoUser(userId, userName, office, mode){
   }
 }
 
-function miniStat(label, value, color){
-  return `<div style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card)">
+function miniStat(label, value, color, onclick){
+  const clickable = onclick ? `onclick="${onclick}" style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card);cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow='var(--shadow-card)'"` : `style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card)"`;
+  return `<div ${clickable}>
     <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${color}">${value}</div>
-    <div style="font-size:11px;color:var(--gray);margin-top:4px;text-transform:uppercase;letter-spacing:.4px">${label}</div>
+    <div style="font-size:11px;color:var(--gray);margin-top:4px;text-transform:uppercase;letter-spacing:.4px">${label}${onclick?` <span style="font-size:9px;opacity:.5">▼</span>`:''}</div>
   </div>`;
 }
 
@@ -2631,6 +2693,18 @@ const INTAKE_DEFAULT = [
 ];
 let OUTREACH = OUTREACH_DEFAULT.map(s=>({...s,offset:s.offset?{...s.offset}:undefined}));
 let INTAKE = INTAKE_DEFAULT.map(s=>({...s}));
+
+// Path C — runs on Active (open) cases. Starts with 1 step; designed to grow.
+const PATH_C = [
+  { t: "Recovery plan uploaded to TCR" }
+];
+
+const TIER_COLORS = { 1:'#7c3aed', 2:'#0077c8', 3:'#166534', 4:'#92400e' };
+const TIER_BG    = { 1:'#ede9fe', 2:'#dbeafe', 3:'#dcfce7', 4:'#fef3c7' };
+function tierBadge(tier){
+  if(!tier) return '<span style="font-size:10px;background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-family:\'Montserrat\',sans-serif;font-weight:700">No Tier</span>';
+  return `<span style="font-size:10px;background:${TIER_BG[tier]};color:${TIER_COLORS[tier]};padding:2px 8px;border-radius:4px;font-family:'Montserrat',sans-serif;font-weight:700">Tier ${tier}</span>`;
+}
 
 let cases = [];
 let reportCases = []; // org/office-scoped cases for Weekly Report compliance stats only
@@ -2680,7 +2754,8 @@ async function load(){
       started:r.started, closed:r.closed, intakeStart:r.intake_start,
       openedAt:r.opened_at, customSteps:r.custom_steps||null,
       flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
-      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null
+      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
+      tier:r.tier||null, pathCStep:r.path_c_step||0
     }));
 
     // Weekly Report is a compliance tool, not a personal view — admins/PMs see org-wide,
@@ -2693,7 +2768,8 @@ async function load(){
     reportCases=(rcData||[]).map(r=>({
       id:r.id, assigned:r.assigned, status:r.status, step:r.step,
       started:r.started, closed:r.closed, intakeStart:r.intake_start,
-      openedAt:r.opened_at, customSteps:r.custom_steps||null
+      openedAt:r.opened_at, customSteps:r.custom_steps||null,
+      tier:r.tier||null, pathCStep:r.path_c_step||0
     }));
 
     // logs
@@ -2742,7 +2818,8 @@ async function saveCase(c){
       started:c.started, closed:c.closed||null, intake_start:c.intakeStart||null,
       opened_at:c.openedAt||null, custom_steps:c.customSteps||null,
       user_id: currentUser?.id || null,
-      office: currentProfile?.office || null
+      office: currentProfile?.office || null,
+      tier: c.tier||null, path_c_step: c.pathCStep||0
     },{onConflict:'id'});
     if(error) throw error;
     // roster name
@@ -3058,17 +3135,27 @@ function renderDash(){
   });
   list.innerHTML=active.map(c=>{
     if(c.status==='open'){
+      const pathCDone = c.pathCStep >= PATH_C.length;
+      const pathCLabel = pathCDone ? '✓ Recovery plan uploaded to TCR' : PATH_C[c.pathCStep]?.t || '';
       return `<div class="case-card open">
         <div class="case-head">
-          <div><span class="case-id">#${c.id}<span class="tag open">Active</span></span>
-            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span class="case-id">#${c.id}<span class="tag open">Active</span></span>
+            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
+            ${tierBadge(c.tier)}
+          </div>
           <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
         </div>
         ${flagBadge(c)}
-        <div class="case-step">Intake complete. Survivor is an active open case.</div>
+        <div class="case-step" style="margin-bottom:6px">
+          <b>Path C</b> — Step ${Math.min(c.pathCStep+1,PATH_C.length)} of ${PATH_C.length}:
+          <span style="color:${pathCDone?'var(--green)':'var(--navy)'}">${pathCLabel}</span>
+        </div>
+        <div class="progress" style="margin-bottom:10px"><i style="width:${pathCDone?100:0}%"></i></div>
         <div class="case-actions">
           <button class="btn sm ghost" onclick="reopenIntake(${c.id})" title="Move back to intake">← Back to Intake</button>
           <span style="flex:1"></span>
+          ${!pathCDone ? `<button class="btn sm gold" onclick="advancePathC(${c.id})">✓ Upload Recovery Plan</button>` : ''}
           <button class="btn sm green" onclick="closeOpenCase(${c.id})">Close Case ✓</button>
           <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
         </div>
@@ -3149,17 +3236,108 @@ function startCase(){
   saveCase(newCase);
   renderAll();
 }
+let tierPendingCaseId = null;
+
+function triggerTierPicker(id){
+  tierPendingCaseId = id;
+  show('tierModal');
+}
+function confirmTier(tier){
+  const c = cases.find(c=>c.id===tierPendingCaseId);
+  if(!c){ closeModal('tierModal'); return; }
+  c.status = 'open';
+  c.openedAt = todayISO();
+  c.tier = tier;
+  c.pathCStep = 0;
+  closeModal('tierModal');
+  saveCase(c);
+  renderAll();
+}
+
 function nextStep(id){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
   const arr=stepsFor(c);
-  if(c.step<arr.length-1){c.step++;}
-  else if(c.status==='intake'){c.status='open';c.openedAt=todayISO();}
-  saveCase(c);renderAll();
+  if(c.step<arr.length-1){c.step++;saveCase(c);renderAll();}
+  else if(c.status==='intake'){ triggerTierPicker(id); }
 }
 function markOpen(id){
   const c=cases.find(c=>c.id===id&&c.status==='intake');if(!c)return;
   if(!confirm('Skip remaining intake steps and mark as Open Case?'))return;
-  c.status='open';c.openedAt=todayISO();saveCase(c);renderAll();
+  triggerTierPicker(id);
+}
+/* ---------- STAT CARD DRILL-DOWN ---------- */
+async function statDrill(statusFilter, titleText, scopeOffice){
+  // scopeOffice: a specific office string to filter by, or null for all offices (org-wide)
+  document.getElementById('statDrillTitle').textContent = titleText;
+  document.getElementById('statDrillList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light)">Loading…</div>';
+  show('statDrillModal');
+
+  try{
+    // Build query — scope by office if given, otherwise org-wide
+    let q = sb.from('cases').select('id,status,step,opened_at,intake_start,started,user_id,office,tier,path_c_step,flagged_for_review,custom_steps').eq('status', statusFilter);
+    if(scopeOffice) q = q.eq('office', scopeOffice);
+
+    // Supervisors see only their assigned CMs' cases regardless of scope
+    if(isSupervisor() && !isAdmin() && !isPM()){
+      const { data: myTeam } = await sb.from('profiles').select('id').eq('supervisor_id', currentProfile.id);
+      const teamIds = (myTeam||[]).map(u=>u.id);
+      teamIds.push(currentProfile.id); // include own cases
+      q = q.in('user_id', teamIds);
+    }
+
+    const { data: cRows } = await q.order('id');
+    const cList = (cRows||[]);
+
+    if(cList.length === 0){
+      document.getElementById('statDrillList').innerHTML = '<div style="text-align:center;color:var(--gray-light);padding:24px;font-style:italic">No cases found for this filter.</div>';
+      return;
+    }
+
+    // Pull CM names for user_ids in results
+    const userIds = [...new Set(cList.map(c=>c.user_id).filter(Boolean))];
+    const { data: profiles } = await sb.from('profiles').select('id,full_name,email').in('id', userIds);
+    const cmNameById = {};
+    (profiles||[]).forEach(p=>{ cmNameById[p.id] = p.full_name || p.email; });
+
+    const statusLabel = { outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
+    const statusColor = { outreach:'var(--amber)', intake:'var(--blue)', open:'var(--green)', completed:'var(--navy)', closed:'var(--gray)', declined:'var(--red)' };
+
+    document.getElementById('statDrillList').innerHTML = `
+      <div style="font-size:11px;color:var(--gray);margin-bottom:10px">${cList.length} case(s)</div>
+      ${cList.map(c=>{
+        const cmName = cmNameById[c.user_id] || '—';
+        const steps = c.status==='outreach' ? (c.custom_steps?.outreach||null) : (c.status==='intake' ? (c.custom_steps?.intake||null) : null);
+        const stepArr = steps || (c.status==='outreach' ? OUTREACH : c.status==='intake' ? INTAKE : PATH_C);
+        const stepLabel = c.status==='open'
+          ? (c.path_c_step >= PATH_C.length ? 'Path C complete ✓' : `Path C: ${PATH_C[c.path_c_step]?.t||''}`)
+          : c.status==='outreach'||c.status==='intake'
+            ? `Step ${(c.step||0)+1} of ${stepArr.length}: ${stepArr[c.step||0]?.t||'—'}`
+            : '—';
+        return `
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--line);border-left:4px solid ${statusColor[c.status]||'var(--gray)'};border-radius:8px;margin-bottom:8px;background:var(--white)">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy)">#${c.id}</span>
+                <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${statusColor[c.status]}22;color:${statusColor[c.status]}">${statusLabel[c.status]||c.status}</span>
+                ${c.status==='open' ? tierBadge(c.tier) : ''}
+              </div>
+              <div style="font-size:12px;color:var(--gray);margin-bottom:2px">👤 ${esc(cmName)} · 📍 ${esc(c.office||'—')}</div>
+              <div style="font-size:11px;color:var(--gray-light)">${esc(stepLabel)}</div>
+            </div>
+          </div>`;
+      }).join('')}`;
+  }catch(e){
+    console.error('statDrill failed', e);
+    document.getElementById('statDrillList').innerHTML = `<div style="color:var(--red)">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function advancePathC(id){
+  const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
+  if(c.pathCStep >= PATH_C.length) return;
+  if(!confirm(`Mark "${PATH_C[c.pathCStep].t}" as complete?`))return;
+  c.pathCStep = (c.pathCStep||0) + 1;
+  saveCase(c); renderAll();
 }
 function closeOpenCase(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
