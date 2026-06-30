@@ -955,21 +955,26 @@ async function loadAdminUsers(){
       const activeCount = users.filter(u=>u.active).length;
       const rows = users.map(u=>{
         const ll = fmtLastLogin(u.last_login);
-        const supervisorPicker = u.role==='case_manager' ? `
-          <select onchange="assignSupervisor('${u.id}', this.value)" style="font-size:10px;font-family:'Open Sans',sans-serif;padding:3px 6px;border:1.5px solid var(--line);border-radius:5px;max-width:140px;color:${u.supervisor_id?'var(--navy)':'var(--gray-light)'}">
-            <option value="">No supervisor</option>
-            ${allSupervisors.map(s=>`<option value="${s.id}" ${u.supervisor_id===s.id?'selected':''}>${esc(s.full_name||s.email)}</option>`).join('')}
-          </select>` : '';
+        const supervisorRow = u.role==='case_manager' ? `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+            <span style="font-size:10px;color:var(--gray);font-family:'Montserrat',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Supervisor:</span>
+            <select onchange="assignSupervisor('${u.id}', this.value)" style="font-size:11px;font-family:'Open Sans',sans-serif;padding:4px 8px;border:1.5px solid var(--line);border-radius:5px;color:${u.supervisor_id?'var(--navy)':'var(--gray-light)'};flex:0 1 auto">
+              <option value="">No supervisor</option>
+              ${allSupervisors.map(s=>`<option value="${s.id}" ${u.supervisor_id===s.id?'selected':''}>${esc(s.full_name||s.email)}</option>`).join('')}
+            </select>
+          </div>` : '';
         return `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
-          <div style="flex:1;min-width:0">
-            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
-            <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
+        <div style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
+              <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
+            </div>
+            <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
+            <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+            <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer;white-space:nowrap">${u.active?'Deactivate':'Activate'}</button>
           </div>
-          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
-          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
-          ${supervisorPicker}
-          <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
+          ${supervisorRow}
         </div>`;
       }).join('');
       return `
