@@ -2318,10 +2318,17 @@ async function saveCase(c){
   }catch(e){ syncErr('Save failed'); cacheWrite(); }
 }
 
-// ---- DELETE a case from Supabase ----
+// ---- DELETE a case from Supabase, plus everything tied to it ----
 async function deleteCase(id){
   syncStart();
   try{
+    // Clean up child records first so nothing orphans in the DB.
+    // (Not relying on FK cascades since those aren't set up in Supabase.)
+    await sb.from('contact_logs').delete().eq('case_id', id);
+    await sb.from('case_notes').delete().eq('case_id', id);
+    await sb.from('client_todos').delete().eq('case_id', id);
+    await sb.from('audit_entries').delete().eq('case_id', id);
+    await sb.from('roster').delete().eq('case_id', id);
     const {error}=await sb.from('cases').delete().eq('id',id);
     if(error) throw error;
     cacheWrite();
@@ -2742,10 +2749,11 @@ function closeCase(id,status){
   c.status=status;c.closed=todayISO();saveCase(c);renderAll();
 }
 function deleteClient(id){
-  if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), and the name. This cannot be undone.`))return;
+  if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), case notes, client to-dos, audit entries, and the name from the roster. This cannot be undone.`))return;
   cases=cases.filter(c=>c.id!==id);
   logs=logs.filter(l=>l.id!==id);
   delete roster[id];
+  clientTodosData=clientTodosData.filter(t=>t.case_id!==id);
   deleteCase(id);
   renderAll();
 }
