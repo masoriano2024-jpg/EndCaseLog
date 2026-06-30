@@ -1649,24 +1649,24 @@ async function renderOfficeOverview(){
     ${dateRangeControlsHtml()}
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Attempts (Range)', totalAttemptsOrg, 'var(--navy)')}
-      ${miniStat('Made Contact', madeContactOrg, 'var(--green)')}
-      ${miniStat('No Answer', noAnswerOrg, 'var(--red)')}
-      ${miniStat('Left Message', leftMessageOrg, 'var(--amber)')}
+      ${miniStat('Attempts (Range)', totalAttemptsOrg, 'var(--navy)', "statDrill('log_result',null,'Attempts — All Offices',null)")}
+      ${miniStat('Made Contact', madeContactOrg, 'var(--green)', "statDrill('log_result','Made contact','Made Contact — All Offices',null)")}
+      ${miniStat('No Answer', noAnswerOrg, 'var(--red)', "statDrill('log_result','No answer','No Answer — All Offices',null)")}
+      ${miniStat('Left Message', leftMessageOrg, 'var(--amber)', "statDrill('log_result','Left message','Left Message — All Offices',null)")}
       ${miniStat('Success Rate', successRateOrg+'%', 'var(--blue)')}
-      ${miniStat('Total Caseload', allOrgCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+      ${miniStat('Total Caseload', allOrgCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)', "statDrill('caseload',null,'Total Caseload — All Offices',null)")}
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
       ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — All Offices',null)")}
       ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — All Offices',null)")}
       ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — All Offices',null)")}
-      ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+      ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', "statDrill('closed_all',null,'Closed Cases — All Offices',null)")}
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOrg, 'var(--red)')}
-      ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOrg, 'var(--green)')}
+      ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOrg, 'var(--red)', "statDrill('closed_before',null,'Closed Before Intake Done — All Offices',null)")}
+      ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOrg, 'var(--green)', "statDrill('closed_after',null,'Closed After Intake Done — All Offices',null)")}
     </div>
 
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -1925,24 +1925,24 @@ async function renderTeamOverview(scope){
       ${dateRangeControlsHtml()}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Attempts (Range)', totalAttemptsOffice, 'var(--navy)')}
-        ${miniStat('Made Contact', madeContactOffice, 'var(--green)')}
-        ${miniStat('No Answer', noAnswerOffice, 'var(--red)')}
-        ${miniStat('Left Message', leftMessageOffice, 'var(--amber)')}
+        ${miniStat('Attempts (Range)', totalAttemptsOffice, 'var(--navy)', `statDrill('log_result',null,'Attempts — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Made Contact', madeContactOffice, 'var(--green)', `statDrill('log_result','Made contact','Made Contact — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('No Answer', noAnswerOffice, 'var(--red)', `statDrill('log_result','No answer','No Answer — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Left Message', leftMessageOffice, 'var(--amber)', `statDrill('log_result','Left message','Left Message — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Success Rate', successRateOffice+'%', 'var(--blue)')}
-        ${miniStat('Total Caseload', officeCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+        ${miniStat('Total Caseload', officeCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)', `statDrill('caseload',null,'Total Caseload — ${esc(office)}','${esc(office)}')`  )}
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('outreach','Pre-Opened — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('intake','Pending — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)', `statDrill('open','Active — ${esc(office)}','${esc(office)}')`  )}
-        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', `statDrill('closed_all',null,'Closed — ${esc(office)}','${esc(office)}')`  )}
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOffice, 'var(--red)')}
-        ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOffice, 'var(--green)')}
+        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActiveOffice, 'var(--red)', `statDrill('closed_before',null,'Closed Before Intake Done — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Closed After Intake Done (Range)', closedAfterActiveOffice, 'var(--green)', `statDrill('closed_after',null,'Closed After Intake Done — ${esc(office)}','${esc(office)}')`  )}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -2483,27 +2483,27 @@ async function drillIntoUser(userId, userName, office, mode){
       ${dateRangeControlsHtml()}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Attempts (Range)', totalAttempts, 'var(--navy)')}
-        ${miniStat('Made Contact', madeContact, 'var(--green)')}
-        ${miniStat('No Answer', noAnswer, 'var(--red)')}
-        ${miniStat('Left Message', leftMessage, 'var(--amber)')}
+        ${miniStat('Attempts (Range)', totalAttempts, 'var(--navy)', "statDrill('log_result',null,'Attempts',null)")}
+        ${miniStat('Made Contact', madeContact, 'var(--green)', "statDrill('log_result','Made contact','Made Contact',null)")}
+        ${miniStat('No Answer', noAnswer, 'var(--red)', "statDrill('log_result','No answer','No Answer',null)")}
+        ${miniStat('Left Message', leftMessage, 'var(--amber)', "statDrill('log_result','Left message','Left Message',null)")}
         ${miniStat('Success Rate', successRate+'%', 'var(--blue)')}
-        ${miniStat('Total Caseload', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)')}
+        ${miniStat('Total Caseload', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)', "statDrill('caseload',null,'Total Caseload',null)")}
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — My Team',null)")}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — My Team',null)")}
         ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — My Team',null)")}
-        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)')}
+        ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', "statDrill('closed_all',null,'Closed Cases',null)")}
       </div>
 
       ${activeCases.length > 0 ? `
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:16px 20px;margin-bottom:20px">
         <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Path C — Recovery Plan Progress</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          ${miniStat('Active Cases', activeCases.length, 'var(--navy)')}
-          ${miniStat('Path C Complete', pathCComplete, 'var(--green)')}
+          ${miniStat('Active Cases', activeCases.length, 'var(--navy)', "statDrill('status','open','Active Cases',null)")}
+          ${miniStat('Path C Complete', pathCComplete, 'var(--green)', "statDrill('status','open','Path C Complete',null)")}
           ${miniStat('Recovery Plan %', pathCPct+'%', pathCPct===100?'var(--green)':pathCPct>50?'var(--blue)':'var(--amber)')}
         </div>
       </div>
@@ -2519,8 +2519,8 @@ async function drillIntoUser(userId, userName, office, mode){
       </div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)')}
-        ${miniStat('Closed After Intake Done (Range)', closedAfterActive, 'var(--green)')}
+        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)', "statDrill('closed_before',null,'Closed Before Intake Done',null)")}
+        ${miniStat('Closed After Intake Done (Range)', closedAfterActive, 'var(--green)', "statDrill('closed_after',null,'Closed After Intake Done',null)")}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -2660,10 +2660,12 @@ async function drillIntoUser(userId, userName, office, mode){
 }
 
 function miniStat(label, value, color, onclick){
-  const clickable = onclick ? `onclick="${onclick}" style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card);cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow='var(--shadow-card)'"` : `style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card)"`;
+  const clickable = onclick
+    ? `onclick="${onclick}" style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card);cursor:pointer;transition:box-shadow .15s,transform .1s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.13)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='var(--shadow-card)';this.style.transform=''"` 
+    : `style="background:var(--white);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;box-shadow:var(--shadow-card)"`;
   return `<div ${clickable}>
     <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${color}">${value}</div>
-    <div style="font-size:11px;color:var(--gray);margin-top:4px;text-transform:uppercase;letter-spacing:.4px">${label}${onclick?` <span style="font-size:9px;opacity:.5">▼</span>`:''}</div>
+    <div style="font-size:11px;color:var(--gray);margin-top:4px;text-transform:uppercase;letter-spacing:.4px">${label}</div>
   </div>`;
 }
 
@@ -3285,72 +3287,106 @@ function markOpen(id){
   triggerTierPicker(id);
 }
 /* ---------- STAT CARD DRILL-DOWN ---------- */
-async function statDrill(statusFilter, titleText, scopeOffice){
-  // scopeOffice: a specific office string to filter by, or null for all offices (org-wide)
+async function statDrill(filterType, filterValue, titleText, scopeOffice){
   document.getElementById('statDrillTitle').textContent = titleText;
-  document.getElementById('statDrillList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light)">Loading…</div>';
+  document.getElementById('statDrillList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light)">Loading\u2026</div>';
   show('statDrillModal');
-
   try{
-    // Build query — scope by office if given, otherwise org-wide
-    let q = sb.from('cases').select('id,status,step,opened_at,intake_start,started,user_id,office,tier,path_c_step,flagged_for_review,custom_steps').eq('status', statusFilter);
-    if(scopeOffice) q = q.eq('office', scopeOffice);
-
-    // Supervisors see only their assigned CMs' cases regardless of scope
+    let supervisorTeamIds = null;
     if(isSupervisor() && !isAdmin() && !isPM()){
       const { data: myTeam } = await sb.from('profiles').select('id').eq('supervisor_id', currentProfile.id);
-      const teamIds = (myTeam||[]).map(u=>u.id);
-      teamIds.push(currentProfile.id); // include own cases
-      q = q.in('user_id', teamIds);
+      supervisorTeamIds = [...(myTeam||[]).map(u=>u.id), currentProfile.id];
+    }
+    const { data: allProfiles } = await sb.from('profiles').select('id,full_name,email');
+    const cmNameById = {};
+    (allProfiles||[]).forEach(p=>{ cmNameById[p.id] = p.full_name || p.email; });
+    const statusColor = { outreach:'var(--amber)', intake:'var(--blue)', open:'var(--green)', completed:'var(--navy)', closed:'var(--gray-light)', declined:'var(--red)' };
+    const statusLabel = { outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
+    let rows = [];
+
+    if(filterType === 'status'){
+      let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').eq('status', filterValue);
+      if(scopeOffice) q = q.eq('office', scopeOffice);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: cRows } = await q.order('id');
+      rows = (cRows||[]).map(c=>{
+        const stepLabel = c.status==='open'
+          ? ((c.path_c_step||0)>=PATH_C.length ? 'Path C complete' : 'Path C Step '+(((c.path_c_step||0)+1))+' of '+PATH_C.length+': '+(PATH_C[c.path_c_step||0]?.t||''))
+          : 'Step '+(((c.step||0)+1))+' of '+(c.status==='intake'?INTAKE:OUTREACH).length+': '+((c.status==='intake'?INTAKE:OUTREACH)[c.step||0]?.t||'');
+        return { id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:c.tier, detail:stepLabel };
+      });
+
+    } else if(filterType === 'caseload'){
+      let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').in('status',['outreach','intake','open']);
+      if(scopeOffice) q = q.eq('office', scopeOffice);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: cRows } = await q.order('status').order('id');
+      rows = (cRows||[]).map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:c.tier, detail:'' }));
+
+    } else if(filterType === 'log_result'){
+      const start = typeof teamRangeStart !== 'undefined' ? teamRangeStart : null;
+      const end   = typeof teamRangeEnd   !== 'undefined' ? teamRangeEnd   : null;
+      let q = sb.from('contact_logs').select('case_id,date,result,user_id').eq('result', filterValue);
+      if(start) q = q.gte('date', start);
+      if(end)   q = q.lte('date', end);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: lRows } = await q.order('date',{ascending:false});
+      const caseIds = [...new Set((lRows||[]).map(l=>l.case_id))];
+      let caseOfficeMap = {};
+      if(caseIds.length > 0){
+        const { data: caseRows } = await sb.from('cases').select('id,office').in('id', caseIds);
+        (caseRows||[]).forEach(c=>{ caseOfficeMap[c.id] = c.office; });
+      }
+      rows = (lRows||[])
+        .filter(l => !scopeOffice || caseOfficeMap[l.case_id]===scopeOffice)
+        .map(l=>({ id:l.case_id, cmName:cmNameById[l.user_id]||'', office:caseOfficeMap[l.case_id]||'', status:'log', tier:null, detail:l.result+' on '+l.date }));
+
+    } else if(filterType === 'closed_before' || filterType === 'closed_after'){
+      const start = typeof teamRangeStart !== 'undefined' ? teamRangeStart : null;
+      const end   = typeof teamRangeEnd   !== 'undefined' ? teamRangeEnd   : null;
+      let q = sb.from('cases').select('id,status,closed,opened_at,user_id,office').in('status',['closed','completed','declined']);
+      if(start) q = q.gte('closed', start);
+      if(end)   q = q.lte('closed', end);
+      if(scopeOffice) q = q.eq('office', scopeOffice);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: cRows } = await q;
+      rows = (cRows||[])
+        .filter(c => filterType==='closed_before' ? !c.opened_at : !!c.opened_at)
+        .map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:null, detail:'Closed '+( c.closed||'') }));
+
+    } else if(filterType === 'closed_all'){
+      let q = sb.from('cases').select('id,status,closed,user_id,office').in('status',['closed','completed','declined']);
+      if(scopeOffice) q = q.eq('office', scopeOffice);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: cRows } = await q.order('closed',{ascending:false});
+      rows = (cRows||[]).map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:null, detail:'Closed '+(c.closed||'') }));
     }
 
-    const { data: cRows } = await q.order('id');
-    const cList = (cRows||[]);
-
-    if(cList.length === 0){
-      document.getElementById('statDrillList').innerHTML = '<div style="text-align:center;color:var(--gray-light);padding:24px;font-style:italic">No cases found for this filter.</div>';
+    if(rows.length === 0){
+      document.getElementById('statDrillList').innerHTML = '<div style="text-align:center;color:var(--gray-light);padding:24px;font-style:italic">No results for this filter.</div>';
       return;
     }
-
-    // Pull CM names for user_ids in results
-    const userIds = [...new Set(cList.map(c=>c.user_id).filter(Boolean))];
-    const { data: profiles } = await sb.from('profiles').select('id,full_name,email').in('id', userIds);
-    const cmNameById = {};
-    (profiles||[]).forEach(p=>{ cmNameById[p.id] = p.full_name || p.email; });
-
-    const statusLabel = { outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
-    const statusColor = { outreach:'var(--amber)', intake:'var(--blue)', open:'var(--green)', completed:'var(--navy)', closed:'var(--gray)', declined:'var(--red)' };
-
-    document.getElementById('statDrillList').innerHTML = `
-      <div style="font-size:11px;color:var(--gray);margin-bottom:10px">${cList.length} case(s)</div>
-      ${cList.map(c=>{
-        const cmName = cmNameById[c.user_id] || '—';
-        const steps = c.status==='outreach' ? (c.custom_steps?.outreach||null) : (c.status==='intake' ? (c.custom_steps?.intake||null) : null);
-        const stepArr = steps || (c.status==='outreach' ? OUTREACH : c.status==='intake' ? INTAKE : PATH_C);
-        const stepLabel = c.status==='open'
-          ? ((c.path_c_step||0) >= PATH_C.length ? 'Path C complete ✓' : `Path C Step ${(c.path_c_step||0)+1} of ${PATH_C.length}: ${PATH_C[c.path_c_step||0]?.t||''}`)
-          : c.status==='outreach'||c.status==='intake'
-            ? `Step ${(c.step||0)+1} of ${stepArr.length}: ${stepArr[c.step||0]?.t||'—'}`
-            : '—';
-        return `
-          <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--line);border-left:4px solid ${statusColor[c.status]||'var(--gray)'};border-radius:8px;margin-bottom:8px;background:var(--white)">
-            <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
-                <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy)">#${c.id}</span>
-                <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${statusColor[c.status]}22;color:${statusColor[c.status]}">${statusLabel[c.status]||c.status}</span>
-                ${c.status==='open' ? tierBadge(c.tier) : ''}
-              </div>
-              <div style="font-size:12px;color:var(--gray);margin-bottom:2px">👤 ${esc(cmName)} · 📍 ${esc(c.office||'—')}</div>
-              <div style="font-size:11px;color:var(--gray-light)">${esc(stepLabel)}</div>
-            </div>
-          </div>`;
-      }).join('')}`;
+    document.getElementById('statDrillList').innerHTML =
+      '<div style="font-size:11px;color:var(--gray);margin-bottom:10px">'+rows.length+' result(s)</div>'+
+      rows.map(r=>{
+        const sc = filterType==='log_result' ? 'var(--blue)' : (statusColor[r.status]||'var(--gray)');
+        const sl = filterType==='log_result' ? filterValue : (statusLabel[r.status]||r.status);
+        return '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--line);border-left:4px solid '+sc+';border-radius:8px;margin-bottom:8px;background:var(--white)">'+
+          '<div style="flex:1;min-width:0">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
+          '<span style="font-family:\'Montserrat\',sans-serif;font-weight:800;font-size:13px;color:var(--navy)">#'+r.id+'</span>'+
+          (filterType!=='log_result'?'<span style="font-size:10px;font-family:\'Montserrat\',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:'+sc+'22;color:'+sc+'">'+sl+'</span>':'')+
+          (r.status==='open'&&r.tier?tierBadge(r.tier):'')+
+          '</div>'+
+          '<div style="font-size:12px;color:var(--gray);margin-bottom:2px">\ud83d\udc64 '+esc(r.cmName)+' \u00b7 \ud83d\udccd '+esc(r.office||'')+' </div>'+
+          (r.detail?'<div style="font-size:11px;color:var(--gray-light)">'+esc(r.detail)+'</div>':'')+
+          '</div></div>';
+      }).join('');
   }catch(e){
     console.error('statDrill failed', e);
-    document.getElementById('statDrillList').innerHTML = `<div style="color:var(--red)">Failed to load: ${esc(e.message)}</div>`;
+    document.getElementById('statDrillList').innerHTML = '<div style="color:var(--red)">Failed to load: '+esc(e.message)+'</div>';
   }
 }
-
 function advancePathC(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
   const steps=stepsFor(c);
