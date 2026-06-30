@@ -929,6 +929,11 @@ async function loadAdminUsers(){
     const loginTierColor = { recent:'#166534', aging:'#92400e', stale:'#991b1b', never:'#64748b' };
     const loginTierBg = { recent:'#dcfce7', aging:'#fef3c7', stale:'#fee2e2', never:'#f1f5f9' };
 
+    // All supervisors org-wide, regardless of office — a CM can be assigned to any of them.
+    const allSupervisors = data.filter(u=>u.role==='supervisor').sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email));
+    const supervisorNameById = {};
+    allSupervisors.forEach(s=>{ supervisorNameById[s.id] = s.full_name||s.email; });
+
     // group by office
     const groups = {};
     data.forEach(u=>{
@@ -950,6 +955,11 @@ async function loadAdminUsers(){
       const activeCount = users.filter(u=>u.active).length;
       const rows = users.map(u=>{
         const ll = fmtLastLogin(u.last_login);
+        const supervisorPicker = u.role==='case_manager' ? `
+          <select onchange="assignSupervisor('${u.id}', this.value)" style="font-size:10px;font-family:'Open Sans',sans-serif;padding:3px 6px;border:1.5px solid var(--line);border-radius:5px;max-width:140px;color:${u.supervisor_id?'var(--navy)':'var(--gray-light)'}">
+            <option value="">No supervisor</option>
+            ${allSupervisors.map(s=>`<option value="${s.id}" ${u.supervisor_id===s.id?'selected':''}>${esc(s.full_name||s.email)}</option>`).join('')}
+          </select>` : '';
         return `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
           <div style="flex:1;min-width:0">
@@ -958,6 +968,7 @@ async function loadAdminUsers(){
           </div>
           <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
           <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+          ${supervisorPicker}
           <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
         </div>`;
       }).join('');
@@ -980,6 +991,13 @@ async function toggleUserActive(id, current){
     await sb.from('profiles').update({ active: !current }).eq('id', id);
     loadAdminUsers();
   }catch(e){ console.error('toggle active failed', e); }
+}
+
+async function assignSupervisor(caseManagerId, supervisorId){
+  try{
+    await sb.from('profiles').update({ supervisor_id: supervisorId || null }).eq('id', caseManagerId);
+    loadAdminUsers();
+  }catch(e){ console.error('assign supervisor failed', e); alert('Failed to update supervisor assignment.'); }
 }
 
 /* ---------- SUPPORT TICKETS (admin view) ---------- */
@@ -1107,7 +1125,8 @@ function setTeamPreset(n){
 function rerenderTeamView(){
   if(teamCurrentView.type==='org') renderOfficeOverview();
   else if(teamCurrentView.type==='office') renderCMOverview(teamCurrentView.office);
-  else if(teamCurrentView.type==='user') drillIntoUser(teamCurrentView.userId, teamCurrentView.userName, teamCurrentView.office);
+  else if(teamCurrentView.type==='supervisor_team') renderSupervisorTeam();
+  else if(teamCurrentView.type==='user') drillIntoUser(teamCurrentView.userId, teamCurrentView.userName, teamCurrentView.office, teamCurrentView.mode);
 }
 
 function destroyTeamCharts(){
@@ -1135,7 +1154,7 @@ async function loadTeamView(){
   teamDrillOffice = null;
   teamDrillUser = null;
   if(isPM() || isAdmin()){ teamCurrentView = { type:'org' }; await renderOfficeOverview(); }
-  else if(isSupervisor()){ teamCurrentView = { type:'office', office:currentProfile.office }; await renderCMOverview(currentProfile.office); }
+  else if(isSupervisor()){ teamCurrentView = { type:'supervisor_team' }; await renderSupervisorTeam(); }
 }
 
 /* ---------- LAYER 1A: PROGRAM MANAGER — OFFICE OVERVIEW ---------- */
@@ -1382,17 +1401,38 @@ async function drillIntoOffice(office){
   await renderCMOverview(office);
 }
 
-/* ---------- LAYER 1B: TEAM OVERVIEW (Supervisor view, or PM/Admin drilled into an office) ---------- */
+/* ---------- LAYER 1B: TEAM OVERVIEW (PM/Admin drilled into an office) ---------- */
 async function renderCMOverview(office){
+  return renderTeamOverview({ mode:'office', office });
+}
+
+/* ---------- LAYER 1B': TEAM OVERVIEW (Supervisor's assigned case managers, cross-office) ---------- */
+async function renderSupervisorTeam(){
+  return renderTeamOverview({ mode:'supervisor' });
+}
+
+async function renderTeamOverview(scope){
+  const mode = scope.mode; // 'office' | 'supervisor'
+  const office = scope.office || null;
   destroyTeamCharts();
   const el=document.getElementById('teamContent');
   el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading team data…</div>';
 
   try{
-    // Every active user in the office shows up here, not just case_manager role —
-    // supervisors/PMs/admins who carry a personal caseload show up too.
-    const { data: users } = await sb.from('profiles').select('*').eq('office', office).eq('active', true);
-    const cmList = users || [];
+    let cmList;
+    if(mode==='supervisor'){
+      // This supervisor's assigned case managers (any office), plus the supervisor's
+      // own caseload if they carry one personally. Assignment is set by admin only,
+      // independent of office — see profiles.supervisor_id.
+      const { data: assigned } = await sb.from('profiles').select('*').eq('supervisor_id', currentProfile.id).eq('active', true);
+      cmList = assigned || [];
+      if(!cmList.find(u=>u.id===currentProfile.id)) cmList = [currentProfile, ...cmList];
+    } else {
+      // Every active user in the office shows up here, not just case_manager role —
+      // supervisors/PMs/admins who carry a personal caseload show up too.
+      const { data: users } = await sb.from('profiles').select('*').eq('office', office).eq('active', true);
+      cmList = users || [];
+    }
 
     const weekAgo = addDays(todayISO(),-6);
     const stats = [];
@@ -1420,7 +1460,7 @@ async function renderCMOverview(office){
       stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
     }
 
-    teamCurrentView = { type:'office', office };
+    teamCurrentView = mode==='supervisor' ? { type:'supervisor_team' } : { type:'office', office };
 
     // office-wide aggregates, scoped to the selected date range
     const days = getTeamDays();
@@ -1458,11 +1498,15 @@ async function renderCMOverview(office){
     const backBtn = isPM()||isAdmin() ? `<button class="btn sm ghost" onclick="renderOfficeOverview()" style="margin-bottom:14px">← All Offices</button>` : '';
     const roleChipColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166534' };
     const roleChipBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
+    const scopeTitle = mode==='supervisor' ? 'My Team — Activity' : `${esc(office)} — Team Activity`;
+    const scopeSubtitle = mode==='supervisor' ? 'Cross-office totals for your assigned case managers. Click a name below to focus on just their data.' : 'Office-wide totals. Click a name below to focus on just their data.';
+    const chartTitleSuffix = mode==='supervisor' ? 'My Team' : office;
+    const emptyMsg = mode==='supervisor' ? 'No case managers assigned to you yet — ask your admin to set this up under Admin → Users.' : 'No active users found for this office yet.';
 
     el.innerHTML = `
       ${backBtn}
-      <h2 class="sec">${esc(office)} — Team Activity</h2>
-      <p class="sec-note">Office-wide totals. Click a name below to focus on just their data.</p>
+      <h2 class="sec">${scopeTitle}</h2>
+      <p class="sec-note">${scopeSubtitle}</p>
 
       ${dateRangeControlsHtml()}
 
@@ -1511,13 +1555,15 @@ async function renderCMOverview(office){
 
       <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">By Team Member</div>
       <div style="display:grid;gap:10px">
-        ${stats.length===0?'<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">No active users found for this office yet.</div>':stats.map(s=>{
+        ${stats.length===0?`<div style="color:var(--gray-light);font-style:italic;padding:20px;text-align:center">${emptyMsg}</div>`:stats.map(s=>{
           const successRate = s.totalAttempts>0 ? Math.round((s.madeContact/s.totalAttempts)*100) : 0;
-          return `<div onclick="drillIntoUser('${s.user.id}','${esc(s.user.full_name||s.user.email)}','${office}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--line);border-left:5px solid ${s.overdue>0?'var(--red)':'var(--green)'};border-radius:10px;padding:14px 18px;box-shadow:var(--shadow-card)">
+          const officeTag = mode==='supervisor' ? `<span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px;background:#f1f5f9;color:#475569">📍 ${esc(s.user.office||'—')}</span>` : '';
+          return `<div onclick="drillIntoUser('${s.user.id}','${esc(s.user.full_name||s.user.email)}','${esc(s.user.office||'')}','${mode}')" style="cursor:pointer;display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--line);border-left:5px solid ${s.overdue>0?'var(--red)':'var(--green)'};border-radius:10px;padding:14px 18px;box-shadow:var(--shadow-card)">
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px">
                 <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:var(--navy)">${esc(s.user.full_name||s.user.email)}</span>
                 <span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.3px;background:${roleChipBg[s.user.role]||'#f1f5f9'};color:${roleChipColors[s.user.role]||'#334155'}">${roleLabel(s.user.role)}</span>
+                ${officeTag}
               </div>
               <div style="font-size:11px;color:var(--gray);margin-top:2px">${s.active} active · ${s.totalAttempts} total contact attempts</div>
             </div>
@@ -1547,7 +1593,7 @@ async function renderCMOverview(office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { display: false }, title: { display: true, text: `Daily Contact Volume — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1570,7 +1616,7 @@ async function renderCMOverview(office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1624,7 +1670,7 @@ async function renderCMOverview(office){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${esc(office)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Montserrat',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -1933,9 +1979,10 @@ async function renderTeamClientTodos(caseId){
 }
 
 /* ---------- LAYER 2: INDIVIDUAL CASE MANAGER DRILL-DOWN ---------- */
-async function drillIntoUser(userId, userName, office){
+async function drillIntoUser(userId, userName, office, mode){
+  mode = mode || 'office';
   teamDrillUser = userId;
-  teamCurrentView = { type:'user', userId, userName, office };
+  teamCurrentView = { type:'user', userId, userName, office, mode };
   destroyTeamCharts();
   const el=document.getElementById('teamContent');
   el.innerHTML='<div style="padding:30px;text-align:center;color:var(--gray-light)">Loading…</div>';
@@ -1990,9 +2037,11 @@ async function drillIntoUser(userId, userName, office){
     const survivorAttempts = totalAttempts - clientAttempts;
     const survivorMade = madeContact - clientMade;
 
-    const backBtn = isPM()||isAdmin()
-      ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
-      : `<button class="btn sm ghost" onclick="renderCMOverview(currentProfile.office)" style="margin-bottom:14px">← Team Overview</button>`;
+    const backBtn = mode==='supervisor'
+      ? `<button class="btn sm ghost" onclick="renderSupervisorTeam()" style="margin-bottom:14px">← My Team</button>`
+      : isPM()||isAdmin()
+        ? `<button class="btn sm ghost" onclick="renderCMOverview('${office}')" style="margin-bottom:14px">← ${esc(office)} Team</button>`
+        : `<button class="btn sm ghost" onclick="renderCMOverview(currentProfile.office)" style="margin-bottom:14px">← Team Overview</button>`;
 
     el.innerHTML = `
       ${backBtn}
