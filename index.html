@@ -587,40 +587,22 @@
               <option value="Austin">Austin</option>
             </select>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 0">
-            <input type="checkbox" id="newUserActive" style="width:16px;height:16px">
-            <label for="newUserActive" style="font-size:12px;color:var(--gray);font-family:'Open Sans',sans-serif">Activate immediately (leave unchecked to build the account now and turn on access later)</label>
-          </div>
           <button class="btn gold" onclick="createUser()" style="width:100%;margin-top:4px">Create Account</button>
           <div id="createUserMsg" style="font-size:12px;font-weight:700;min-height:16px;text-align:center"></div>
         </div>
       </div>
 
-      <!-- ADMINS & MANAGERS LIST -->
+      <!-- USER LIST -->
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
         <div style="background:var(--navy);padding:12px 18px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
-          <span>👑 Admins &amp; Managers</span>
+          <span>👥 All Users</span>
           <button onclick="loadAdminUsers()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer">↻ Refresh</button>
         </div>
-        <div id="adminUserList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:80px">
-          <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>
+        <div id="adminUserList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:100px">
+          <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading users…</div>
         </div>
       </div>
 
-    </div>
-
-    <!-- SUPERVISOR ASSIGNMENT BOARD (full width) -->
-    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden;margin-top:20px">
-      <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--navy-deep) 100%);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">🗂 Supervisor Assignments</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px;font-weight:500">Drag case manager cards into a supervisor column to assign them</div>
-        </div>
-        <button onclick="loadAdminUsers()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:700;padding:5px 12px;border-radius:5px;cursor:pointer">↻ Refresh Board</button>
-      </div>
-      <div id="supervisorBoard" style="padding:16px;min-height:180px">
-        <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>
-      </div>
     </div>
 
     <!-- SUPPORT TICKETS (full width, admin/supervisor/PM only — this whole section is inside the admin-only panel) -->
@@ -838,19 +820,6 @@ async function bootApp(user){
   const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
   currentProfile = profile;
 
-  // Inactive accounts (pre-launch builds, offboarded staff) get signed right back out.
-  // This is the actual access gate — the admin "Deactivate" toggle now has real teeth.
-  if(profile && profile.active === false){
-    await sb.auth.signOut();
-    currentUser = null;
-    currentProfile = null;
-    document.getElementById('appShell').style.display = 'none';
-    document.getElementById('loginScreen').style.display = 'flex';
-    const errEl = document.getElementById('loginError');
-    if(errEl) errEl.textContent = 'This account is not active yet. Contact your administrator.';
-    return;
-  }
-
   // show app, hide login
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
@@ -887,7 +856,6 @@ async function createUser(){
   const password = document.getElementById('newUserPassword').value.trim();
   const role = document.getElementById('newUserRole').value;
   const office = document.getElementById('newUserOffice').value;
-  const activateNow = document.getElementById('newUserActive').checked;
   const msg = document.getElementById('createUserMsg');
   msg.textContent = '';
 
@@ -914,16 +882,15 @@ async function createUser(){
         full_name: name,
         role,
         office,
-        active: activateNow
+        active: true
       });
     }
 
     msg.style.color='var(--green)';
-    msg.textContent = activateNow ? `✓ Account created and active for ${name}` : `✓ Account built for ${name} — not active yet`;
+    msg.textContent=`✓ Account created for ${name}`;
     document.getElementById('newUserName').value='';
     document.getElementById('newUserEmail').value='';
     document.getElementById('newUserPassword').value='';
-    document.getElementById('newUserActive').checked=false;
     loadAdminUsers();
   }catch(e){
     msg.style.color='var(--red)';
@@ -946,179 +913,76 @@ function fmtLastLogin(ts){
   return { label, tier };
 }
 
-let adminDragCmId = null;
-
 async function loadAdminUsers(){
   const el = document.getElementById('adminUserList');
-  const board = document.getElementById('supervisorBoard');
-  if(el) el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
-  if(board) board.innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light);font-size:13px">Loading…</div>';
-
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
   try{
-    const { data, error } = await sb.from('profiles').select('*').order('full_name');
+    const { data, error } = await sb.from('profiles').select('*').order('office').order('full_name');
     if(error) throw error;
     if(!data || data.length === 0){
-      if(el) el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
-      if(board) board.innerHTML = '';
+      el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
       return;
     }
-
-    const loginTierColor = { recent:'#166534', aging:'#92400e', stale:'#991b1b', never:'#64748b' };
-    const loginTierBg   = { recent:'#dcfce7', aging:'#fef3c7', stale:'#fee2e2', never:'#f1f5f9' };
     const roleColors = { admin:'#1B2A4A', program_manager:'#7c3aed', supervisor:'#0077c8', case_manager:'#166524' };
-    const roleBg     = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
+    const roleBg = { admin:'#e8edf5', program_manager:'#ede9fe', supervisor:'#dbeafe', case_manager:'#dcfce7' };
+    const loginTierColor = { recent:'#166534', aging:'#92400e', stale:'#991b1b', never:'#64748b' };
+    const loginTierBg = { recent:'#dcfce7', aging:'#fef3c7', stale:'#fee2e2', never:'#f1f5f9' };
 
-    const activeSupervisors = data.filter(u=>u.role==='supervisor'&&u.active).sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email));
-    const allCaseManagers   = data.filter(u=>u.role==='case_manager');
-    const otherUsers        = data.filter(u=>u.role!=='supervisor'&&u.role!=='case_manager');
+    // All supervisors org-wide, regardless of office — a CM can be assigned to any of them.
+    const allSupervisors = data.filter(u=>u.role==='supervisor').sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email));
+    const supervisorNameById = {};
+    allSupervisors.forEach(s=>{ supervisorNameById[s.id] = s.full_name||s.email; });
 
-    /* ---- #adminUserList : Admins & Program Managers ---- */
-    if(el){
-      if(otherUsers.length === 0){
-        el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic;padding:8px 0">No admins or program managers yet.</div>';
-      } else {
-        el.innerHTML = otherUsers.map(u=>{
-          const ll = fmtLastLogin(u.last_login);
-          return `
-          <div style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div style="flex:1;min-width:0">
-                <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.full_name||u.email)}</div>
-                <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
-                <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">
-                  <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
-                  <span style="font-size:10px;background:#f1f5f9;color:var(--gray);padding:2px 7px;border-radius:4px">${esc(u.office||'—')}</span>
-                  <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
-                </div>
-              </div>
-              <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:5px 10px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer;white-space:nowrap">${u.active?'Deactivate':'Activate'}</button>
-            </div>
-          </div>`;
-        }).join('');
-      }
-    }
+    // group by office
+    const groups = {};
+    data.forEach(u=>{
+      const office = u.office || 'Unassigned';
+      if(!groups[office]) groups[office] = [];
+      groups[office].push(u);
+    });
+    const officeOrder = ['Kerrville','San Angelo','Austin'];
+    const officeKeys = Object.keys(groups).sort((a,b)=>{
+      const ia = officeOrder.indexOf(a), ib = officeOrder.indexOf(b);
+      if(ia===-1 && ib===-1) return a.localeCompare(b);
+      if(ia===-1) return 1;
+      if(ib===-1) return -1;
+      return ia-ib;
+    });
 
-    /* ---- #supervisorBoard : Drag-and-drop assignment board ---- */
-    if(!board) return;
-
-    function cmCard(u){
-      const ll = fmtLastLogin(u.last_login);
-      const inactive = !u.active;
-      const initials = (u.full_name||u.email||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
-      return `
-        <div
-          class="admin-cm-card"
-          draggable="true"
-          data-cm-id="${u.id}"
-          ondragstart="adminDragStart(event,'${u.id}')"
-          ondragend="adminDragEnd(event)"
-          style="display:flex;align-items:center;gap:10px;background:${inactive?'#f8fafc':'var(--white)'};border:1px solid ${inactive?'#e2e8f0':'var(--line)'};border-radius:8px;padding:10px 12px;cursor:grab;margin-bottom:7px;transition:opacity .15s,box-shadow .15s;user-select:none;${inactive?'opacity:.55;':''}"
-          title="${esc(u.full_name||u.email)} · ${esc(u.office||'No office')}${inactive?' · Inactive':''}"
-        >
-          <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--blue-pale) 0%,var(--blue-light) 100%);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:var(--navy);flex-shrink:0">${initials}</div>
+    el.innerHTML = officeKeys.map(office=>{
+      const users = groups[office];
+      const activeCount = users.filter(u=>u.active).length;
+      const rows = users.map(u=>{
+        const ll = fmtLastLogin(u.last_login);
+        const supervisorPicker = u.role==='case_manager' ? `
+          <select onchange="assignSupervisor('${u.id}', this.value)" style="font-size:10px;font-family:'Open Sans',sans-serif;padding:3px 6px;border:1.5px solid var(--line);border-radius:5px;max-width:140px;color:${u.supervisor_id?'var(--navy)':'var(--gray-light)'}">
+            <option value="">No supervisor</option>
+            ${allSupervisors.map(s=>`<option value="${s.id}" ${u.supervisor_id===s.id?'selected':''}>${esc(s.full_name||s.email)}</option>`).join('')}
+          </select>` : '';
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
           <div style="flex:1;min-width:0">
-            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.full_name||u.email)}</div>
-            <div style="display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap">
-              <span style="font-size:9px;background:#f1f5f9;color:var(--gray);padding:1px 6px;border-radius:3px;font-family:'Montserrat',sans-serif;font-weight:600">${esc(u.office||'—')}</span>
-              <span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:1px 6px;border-radius:3px;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
-              ${inactive?`<span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:1px 6px;border-radius:3px;background:#fee2e2;color:#991b1b">Inactive</span>`:''}
-            </div>
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.full_name||u.email)}</div>
+            <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
-            <button onclick="event.stopPropagation();toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:4px;padding:2px 7px;font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
-            <div style="color:var(--gray-light);font-size:15px;cursor:grab;line-height:1;padding-top:2px" title="Drag to reassign">⠿</div>
-          </div>
+          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
+          <span style="font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+          ${supervisorPicker}
+          <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-family:'Montserrat',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
         </div>`;
-    }
-
-    function supervisorCol(sup){
-      const ll = fmtLastLogin(sup.last_login);
-      const assignedCMs = allCaseManagers.filter(u=>u.supervisor_id===sup.id);
-      const initials = (sup.full_name||sup.email||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+      }).join('');
       return `
-        <div style="display:flex;flex-direction:column;min-width:250px;flex:1">
-          <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--navy-deep) 100%);border-radius:10px 10px 0 0;padding:14px 14px 12px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--blue) 0%,var(--blue-bright) 100%);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#fff;flex-shrink:0;box-shadow:0 2px 10px rgba(0,100,220,.35)">${initials}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sup.full_name||sup.email)}</div>
-                <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">📍 ${esc(sup.office||'—')} · Supervisor</div>
-              </div>
-              <div style="text-align:center;flex-shrink:0;background:rgba(255,255,255,.12);border-radius:8px;padding:6px 10px">
-                <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fff;line-height:1">${assignedCMs.length}</div>
-                <div style="font-size:9px;color:rgba(255,255,255,.55);font-family:'Montserrat',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:2px">CMs</div>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:10px;border-top:1px solid rgba(255,255,255,.1);padding-top:9px">
-              <span style="font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;padding:2px 7px;border-radius:3px;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
-              <button onclick="toggleUserActive('${sup.id}',${sup.active})" style="background:${sup.active?'rgba(220,38,38,.25)':'rgba(22,101,52,.25)'};border:1px solid ${sup.active?'rgba(220,38,38,.4)':'rgba(22,101,52,.4)'};border-radius:4px;padding:2px 8px;font-size:9px;font-family:'Montserrat',sans-serif;font-weight:700;color:${sup.active?'#fca5a5':'#86efac'};cursor:pointer;text-transform:uppercase;letter-spacing:.3px">${sup.active?'Deactivate':'Activate'}</button>
-            </div>
-          </div>
-          <div
-            class="admin-sup-dropzone"
-            data-sup-id="${sup.id}"
-            ondragover="adminDragOver(event)"
-            ondragleave="adminDragLeave(event)"
-            ondrop="adminDrop(event,'${sup.id}')"
-            style="flex:1;min-height:150px;border:2px dashed #cbd5e1;border-top:none;border-radius:0 0 10px 10px;padding:10px;background:#f8fafc;transition:background .15s,border-color .15s"
-          >
-            ${assignedCMs.length===0
-              ? `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px;text-align:center;opacity:.45"><div style="font-size:26px;margin-bottom:6px">⬇</div><div style="font-size:11px;color:var(--gray-light);font-style:italic">Drop case managers here</div></div>`
-              : assignedCMs.map(cmCard).join('')}
-          </div>
-        </div>`;
-    }
-
-    const activeSupervisorIds = new Set(activeSupervisors.map(s=>s.id));
-    const unassignedCMs = allCaseManagers.filter(u=>!u.supervisor_id||!activeSupervisorIds.has(u.supervisor_id));
-
-    const unassignedCol = `
-      <div style="display:flex;flex-direction:column;min-width:250px;flex:1">
-        <div style="background:linear-gradient(135deg,#475569 0%,#334155 100%);border-radius:10px 10px 0 0;padding:14px 14px 12px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👤</div>
-            <div style="flex:1">
-              <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:#fff">Unassigned</div>
-              <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px">No supervisor assigned yet</div>
-            </div>
-            <div style="text-align:center;flex-shrink:0;background:rgba(255,255,255,.12);border-radius:8px;padding:6px 10px">
-              <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fff;line-height:1">${unassignedCMs.length}</div>
-              <div style="font-size:9px;color:rgba(255,255,255,.55);font-family:'Montserrat',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:2px">CMs</div>
-            </div>
-          </div>
+      <div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 4px;margin-bottom:6px">
+          <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">📍 ${esc(office)}</span>
+          <span style="font-size:11px;color:var(--gray);font-family:'Open Sans',sans-serif">${activeCount}/${users.length} active</span>
         </div>
-        <div
-          class="admin-sup-dropzone"
-          data-sup-id=""
-          ondragover="adminDragOver(event)"
-          ondragleave="adminDragLeave(event)"
-          ondrop="adminDrop(event,'')"
-          style="flex:1;min-height:150px;border:2px dashed #cbd5e1;border-top:none;border-radius:0 0 10px 10px;padding:10px;background:#f8fafc;transition:background .15s,border-color .15s"
-        >
-          ${unassignedCMs.length===0
-            ? `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px;text-align:center;opacity:.45"><div style="font-size:26px;margin-bottom:6px">✓</div><div style="font-size:11px;color:var(--gray-light)">All case managers assigned!</div></div>`
-            : unassignedCMs.map(cmCard).join('')}
-        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
       </div>`;
-
-    const legend = `
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:11px;color:var(--gray);padding:10px 12px;background:var(--blue-bg);border-radius:7px;border:1px solid var(--line)">
-        <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--navy)">Legend:</span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:11px;height:11px;background:#dcfce7;border-radius:2px;border:1px solid #86efac"></span>Logged in recently</span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:11px;height:11px;background:#fef3c7;border-radius:2px;border:1px solid #fde68a"></span>3–14 days ago</span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:11px;height:11px;background:#fee2e2;border-radius:2px;border:1px solid #fca5a5"></span>14+ days ago</span>
-        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:11px;height:11px;background:#f1f5f9;border-radius:2px;border:1px solid #cbd5e1"></span>Never logged in</span>
-        <span style="margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--blue);font-weight:600">⠿ Grab card to drag</span>
-      </div>`;
-
-    board.innerHTML = activeSupervisors.length === 0
-      ? `<div style="text-align:center;padding:50px 20px;color:var(--gray-light);font-size:14px">No active supervisors found. Create supervisor accounts above to enable drag-and-drop assignments.</div>`
-      : `${legend}<div style="display:flex;gap:16px;overflow-x:auto;padding-bottom:12px;align-items:flex-start">${activeSupervisors.map(supervisorCol).join('')}${unassignedCol}</div>`;
-
+    }).join('');
   }catch(e){
-    console.error('loadAdminUsers failed', e);
-    if(el) el.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
-    if(board) board.innerHTML = '<div style="font-size:13px;color:var(--red);padding:20px">Failed to load assignment board.</div>';
+    el.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
   }
 }
 
@@ -1130,71 +994,10 @@ async function toggleUserActive(id, current){
 }
 
 async function assignSupervisor(caseManagerId, supervisorId){
-  if(!isAdmin()){ console.warn('assignSupervisor: admin only'); return; }
   try{
     await sb.from('profiles').update({ supervisor_id: supervisorId || null }).eq('id', caseManagerId);
     loadAdminUsers();
   }catch(e){ console.error('assign supervisor failed', e); alert('Failed to update supervisor assignment.'); }
-}
-
-/* ---------- ADMIN DRAG-AND-DROP HANDLERS ---------- */
-function adminDragStart(event, cmId){
-  adminDragCmId = cmId;
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', cmId);
-  // Brief delay so the browser captures the element snapshot before we dim it
-  setTimeout(()=>{
-    const card = document.querySelector(`.admin-cm-card[data-cm-id="${cmId}"]`);
-    if(card){ card.style.opacity = '0.3'; card.style.transform = 'scale(0.96)'; card.style.boxShadow = '0 8px 28px rgba(0,80,180,.22)'; }
-  }, 0);
-}
-
-function adminDragEnd(event){
-  if(adminDragCmId){
-    const card = document.querySelector(`.admin-cm-card[data-cm-id="${adminDragCmId}"]`);
-    if(card){ card.style.opacity = ''; card.style.transform = ''; card.style.boxShadow = ''; }
-  }
-  adminDragCmId = null;
-  document.querySelectorAll('.admin-sup-dropzone').forEach(z=>{
-    z.style.background = '#f8fafc';
-    z.style.borderColor = '#cbd5e1';
-    z.style.borderStyle = 'dashed';
-  });
-}
-
-function adminDragOver(event){
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-  const zone = event.currentTarget;
-  zone.style.background = 'var(--blue-pale)';
-  zone.style.borderColor = 'var(--blue)';
-  zone.style.borderStyle = 'solid';
-}
-
-function adminDragLeave(event){
-  // Only reset if we're leaving the zone itself, not a child element
-  if(!event.currentTarget.contains(event.relatedTarget)){
-    const zone = event.currentTarget;
-    zone.style.background = '#f8fafc';
-    zone.style.borderColor = '#cbd5e1';
-    zone.style.borderStyle = 'dashed';
-  }
-}
-
-async function adminDrop(event, supervisorId){
-  event.preventDefault();
-  if(!isAdmin()) return;
-  const cmId = adminDragCmId || event.dataTransfer.getData('text/plain');
-  const zone = event.currentTarget;
-  zone.style.background = '#f8fafc';
-  zone.style.borderColor = '#cbd5e1';
-  zone.style.borderStyle = 'dashed';
-  if(!cmId) return;
-  // Visual confirmation pulse before the async reload
-  zone.style.background = 'var(--green-soft)';
-  zone.style.borderColor = 'var(--green)';
-  setTimeout(()=>{ zone.style.background='#f8fafc'; zone.style.borderColor='#cbd5e1'; }, 600);
-  await assignSupervisor(cmId, supervisorId);
 }
 
 /* ---------- SUPPORT TICKETS (admin view) ---------- */
