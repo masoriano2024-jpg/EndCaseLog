@@ -400,7 +400,7 @@
   <button data-tab="audit">Self-Audit</button>
   <button data-tab="notes">Notes</button>
   <button data-tab="team" id="teamTabBtn" style="display:none">Team</button>
-  <button data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
+  <button data-tab="admin" id="adminTabBtn" style="display:none;position:relative">Admin<span id="ticketBadge" style="display:none;position:absolute;top:2px;right:4px;min-width:16px;height:16px;padding:0 4px;background:#dc2626;color:#fff;border-radius:8px;font-size:10px;line-height:16px;font-weight:700;text-align:center;box-sizing:border-box">0</span></button>
 </nav>
 
 <main>
@@ -904,6 +904,7 @@ async function bootApp(user){
   // show/hide admin tab
   if(isAdmin()){
     document.getElementById('adminTabBtn').style.display = '';
+    refreshTicketBadge();
   }
 
   // show/hide team tab
@@ -1415,7 +1416,22 @@ async function adminDrop(event, supervisorId){
 }
 
 /* ---------- SUPPORT TICKETS (admin view) ---------- */
+// Unread badge on the Admin tab — counts tickets that still need attention (open / in progress).
+async function refreshTicketBadge(){
+  const badge = document.getElementById('ticketBadge');
+  if(!badge || !isAdmin()) return;
+  try{
+    const { count, error } = await sb.from('support_tickets')
+      .select('id', { count:'exact', head:true })
+      .or('status.is.null,status.in.(open,in_progress)');
+    if(error) throw error;
+    if(count && count > 0){ badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+  }catch(e){ /* badge is best-effort; don't disrupt the app */ }
+}
+
 async function loadAdminTickets(){
+  refreshTicketBadge();
   const el = document.getElementById('adminTicketList');
   if(!el) return;
   el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
@@ -3893,6 +3909,7 @@ async function submitTicket(){
     if(error) throw error;
     msgEl.style.color='var(--green)';
     msgEl.textContent='Ticket submitted ✓ — thank you!';
+    refreshTicketBadge();
     setTimeout(()=>{ closeModal('ticketModal'); }, 1200);
   }catch(e){
     console.error('ticket submit failed', e);
