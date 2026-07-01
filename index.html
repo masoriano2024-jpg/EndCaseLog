@@ -1674,9 +1674,9 @@ async function renderOfficeOverview(){
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-      ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — All Offices',null)")}
-      ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — All Offices',null)")}
-      ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — All Offices',null)")}
+      ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('status','outreach','Pre-Opened — All Offices',null)")}
+      ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('status','intake','Pending — All Offices',null)")}
+      ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Active — All Offices',null)")}
       ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', "statDrill('closed_all',null,'Closed Cases — All Offices',null)")}
     </div>
 
@@ -1950,9 +1950,9 @@ async function renderTeamOverview(scope){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('outreach','Pre-Opened — ${esc(office)}','${esc(office)}')`  )}
-        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('intake','Pending — ${esc(office)}','${esc(office)}')`  )}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)', `statDrill('open','Active — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('status','outreach','Pre-Opened — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('status','intake','Pending — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)', `statDrill('status','open','Active — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', `statDrill('closed_all',null,'Closed — ${esc(office)}','${esc(office)}')`  )}
       </div>
 
@@ -2508,9 +2508,9 @@ async function drillIntoUser(userId, userName, office, mode){
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('outreach','Pre-Opened — My Team',null)")}
-        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('intake','Pending — My Team',null)")}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('open','Active — My Team',null)")}
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('status','outreach','Pre-Opened — My Team',null)")}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('status','intake','Pending — My Team',null)")}
+        ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Active — My Team',null)")}
         ${miniStat('Closed (All Time)', statusCounts.closed||0, 'var(--red)', "statDrill('closed_all',null,'Closed Cases',null)")}
       </div>
 
@@ -2519,7 +2519,7 @@ async function drillIntoUser(userId, userName, office, mode){
         <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Path C — Recovery Plan Progress</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
           ${miniStat('Active Cases', activeCases.length, 'var(--navy)', "statDrill('status','open','Active Cases',null)")}
-          ${miniStat('Path C Complete', pathCComplete, 'var(--green)', "statDrill('status','open','Path C Complete',null)")}
+          ${miniStat('Path C Complete', pathCComplete, 'var(--green)', "statDrill('path_c_complete',null,'Path C Complete — My Team',null)")}
           ${miniStat('Recovery Plan %', pathCPct+'%', pathCPct===100?'var(--green)':pathCPct>50?'var(--blue)':'var(--amber)')}
         </div>
       </div>
@@ -3331,6 +3331,15 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
           : 'Step '+(((c.step||0)+1))+' of '+(c.status==='intake'?INTAKE:OUTREACH).length+': '+((c.status==='intake'?INTAKE:OUTREACH)[c.step||0]?.t||'');
         return { id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:c.tier, detail:stepLabel };
       });
+
+    } else if(filterType === 'path_c_complete'){
+      let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').eq('status','open');
+      if(scopeOffice) q = q.eq('office', scopeOffice);
+      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      const { data: cRows } = await q.order('id');
+      rows = (cRows||[])
+        .filter(c => (c.path_c_step||0) >= PATH_C.length)
+        .map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:c.tier, detail:'Path C complete' }));
 
     } else if(filterType === 'caseload'){
       let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').in('status',['outreach','intake','open']);
