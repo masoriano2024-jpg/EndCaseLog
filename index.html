@@ -899,21 +899,26 @@ async function bootApp(user){
   document.getElementById('userNameDisplay').textContent = profile?.full_name || user.email;
   document.getElementById('userRoleDisplay').textContent = roleLabel(profile?.role) + (profile?.office ? ' · ' + profile.office : '');
 
-  // show/hide admin tab
-  if(isAdmin()){
-    document.getElementById('adminTabBtn').style.display = '';
-    refreshTicketBadge();
-  }
+  // Role-gated tabs: set visibility BOTH ways every login. This is a single-page app,
+  // so switching accounts doesn't reload the page — if we only ever turned tabs ON, an
+  // admin's tabs would linger for the next (lower-privilege) person who signs in. Deciding
+  // show-or-hide from scratch on each login keeps the UI honest without a page refresh.
+  document.getElementById('adminTabBtn').style.display = isAdmin() ? '' : 'none';
+  if(isAdmin()) refreshTicketBadge();
 
-  // show/hide team tab
-  if(isSupervisor() || isPM() || isAdmin()){
-    document.getElementById('teamTabBtn').style.display = '';
-  }
+  document.getElementById('teamTabBtn').style.display = (isSupervisor() || isPM() || isAdmin()) ? '' : 'none';
 
-  // hide Steps tab for non-admins
-  if(!isAdmin()){
-    document.getElementById('stepsTabBtn').style.display = 'none';
-  }
+  document.getElementById('stepsTabBtn').style.display = isAdmin() ? '' : 'none';
+
+  // Reset the view to the Dashboard on every login. A panel stays "shown" until another
+  // tab is clicked, and logout doesn't clear it — so without this, an Admin panel left
+  // open by a previous session would remain visible to the next person who signs in.
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('show'));
+  const dashBtn = document.querySelector('nav.tabs button[data-tab="dash"]');
+  if(dashBtn) dashBtn.classList.add('active');
+  const dashPanel = document.getElementById('dash');
+  if(dashPanel) dashPanel.classList.add('show');
 
   // init app
   document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
@@ -2326,6 +2331,7 @@ async function openTeamClientProfile(id){
           <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
           ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
+        ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, teamAfterDelete)">🗑 Delete Case</button>`:''}
       </div>
 
       <!-- FLAG -->
@@ -2368,6 +2374,12 @@ async function openTeamClientProfile(id){
 
   renderTeamCaseNotes(id);
   renderTeamClientTodos(id);
+}
+
+// After an admin deletes a case from the Team drill-in view: reload the current
+// Team screen from teamCurrentView so the drilled user's caseload + metrics refresh.
+function teamAfterDelete(){
+  rerenderTeamView();
 }
 
 async function handleFlagClickInProfile(caseId, currentlyFlagged){
@@ -2874,6 +2886,21 @@ async function deleteCase(id){
     cacheWrite();
     syncDone();
   }catch(e){ syncErr('Delete failed'); cacheWrite(); }
+}
+
+// ---- ADMIN: confirm + delete a case, then refresh the calling screen ----
+// Reuses deleteCase() (which wipes logs, notes, tasks, audit, roster name, and the case).
+// Guarded by a type-the-number prompt so a stray click can't wipe real data.
+async function adminDeleteCaseWithConfirm(id, afterDelete){
+  if(!isAdmin()) return; // defense in depth — button is also hidden for non-admins
+  const typed = prompt(
+    `⚠️ This permanently deletes Case #${id} and ALL of its logs, notes, tasks, ` +
+    `and audit records.\n\nThis CANNOT be undone.\n\nType ${id} to confirm.`
+  );
+  if(typed === null) return;            // Cancel
+  if(typed.trim() !== String(id)) return; // wrong number — do nothing
+  await deleteCase(id);
+  if(typeof afterDelete === 'function') afterDelete();
 }
 
 // ---- SAVE a contact log ----
@@ -3552,6 +3579,19 @@ function setName(id,v){
   saveRosterName(id, v.trim()||null);
 }
 
+// After an admin deletes a case from the Roster tab: drop it from the in-memory
+// lists, close the profile panel, and re-render so metrics update without a reload.
+function rosterAfterDelete(){
+  const id = activeRosterId;
+  cases = cases.filter(c=>c.id!==id);
+  logs = logs.filter(l=>l.id!==id);
+  delete roster[id];
+  activeRosterId = null;
+  const panel = document.getElementById('clientProfile');
+  if(panel) panel.style.display='none';
+  renderAll();
+}
+
 async function openClientProfile(id, silent=false){
   activeRosterId=id;
   if(!silent) renderRoster();
@@ -3626,6 +3666,7 @@ async function openClientProfile(id, silent=false){
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName(${id},this.value);renderRoster()">
+          ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, rosterAfterDelete)">🗑 Delete Case</button>`:''}
           <button class="btn sm ghost" style="color:var(--white);border-color:rgba(255,255,255,.3)" onclick="activeRosterId=null;document.getElementById('clientProfile').style.display='none';renderRoster()">✕ Close</button>
         </div>
       </div>
