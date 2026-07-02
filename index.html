@@ -750,7 +750,7 @@
 <div class="modal-bg" id="tierModal">
   <div class="modal">
     <h3>Assign Case Tier</h3>
-    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">This case is now Active. Select the tier before continuing — it can be viewed in reporting but cannot be changed after it's set.</p>
+    <p style="font-size:13px;color:var(--gray);margin-bottom:16px">This case is now Open. Select the tier before continuing — it can be viewed in reporting but cannot be changed after it's set.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
       <button onclick="confirmTier(1)" style="padding:18px 10px;border:2px solid #ede9fe;border-radius:10px;background:#ede9fe;color:#7c3aed;font-family:'Poppins',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 1</button>
       <button onclick="confirmTier(2)" style="padding:18px 10px;border:2px solid #dbeafe;border-radius:10px;background:#dbeafe;color:#0077c8;font-family:'Poppins',sans-serif;font-weight:800;font-size:15px;cursor:pointer">Tier 2</button>
@@ -1077,7 +1077,7 @@ async function parseImportFile(){
 
       if(status==='outreach' && !assignedISO){ errors.push(`Row ${rowNum}: Date Assigned is required for Pre-Opened cases.`); return; }
       if(status==='intake' && !intakeStartISO){ errors.push(`Row ${rowNum}: Date Intake Started is required for Pending cases.`); return; }
-      if((status==='open'||status==='completed') && !openedISO){ errors.push(`Row ${rowNum}: Date Case Opened is required for Active/Completed cases.`); return; }
+      if((status==='open'||status==='completed') && !openedISO){ errors.push(`Row ${rowNum}: Date Case Opened is required for Open/Completed cases.`); return; }
       if((status==='closed'||status==='completed'||status==='declined') && !closedISO){ errors.push(`Row ${rowNum}: Date Closed is required for Closed/Completed/Declined cases.`); return; }
 
       valid.push({
@@ -1681,7 +1681,7 @@ async function renderOfficeOverview(){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
       ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('status','outreach','Pre-Opened — All Offices',null)")}
       ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('status','intake','Pending — All Offices',null)")}
-      ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Active — All Offices',null)")}
+      ${miniStat('Open', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Open — All Offices',null)")}
       ${miniStat('Closed (All Time)', closedAllOrg, 'var(--red)', "statDrill('closed_all',null,'Closed Cases — All Offices',null)")}
     </div>
 
@@ -1763,7 +1763,7 @@ async function renderOfficeOverview(){
         datasets: [
           { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
           { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-          { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+          { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
           { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
         ]
       },
@@ -1958,7 +1958,7 @@ async function renderTeamOverview(scope){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('status','outreach','Pre-Opened — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('status','intake','Pending — ${esc(office)}','${esc(office)}')`  )}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)', `statDrill('status','open','Active — ${esc(office)}','${esc(office)}')`  )}
+        ${miniStat('Open', statusCounts.open||0, 'var(--green)', `statDrill('status','open','Open — ${esc(office)}','${esc(office)}')`  )}
         ${miniStat('Closed (All Time)', closedAllOffice, 'var(--red)', `statDrill('closed_all',null,'Closed — ${esc(office)}','${esc(office)}')`  )}
       </div>
 
@@ -2046,7 +2046,7 @@ async function renderTeamOverview(scope){
           datasets: [
             { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
             { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-            { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
             { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
           ]
         },
@@ -2179,7 +2179,7 @@ function renderReadOnlyCard(c){
     return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span class="case-id">#${c.id}<span class="tag open">Active</span></span>
+          <span class="case-id">#${c.id}<span class="tag open">Open</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
           ${tierBadge(c.tier)}
         </div>
@@ -2324,7 +2324,7 @@ async function openTeamClientProfile(id){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
         <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${statusLabel(c.status)}</div><div class="profile-stat-lbl">Status</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
-        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Open'}</div><div class="profile-stat-lbl">Closed</div></div>
       </div>
       <div style="font-size:13px;color:var(--gray);padding:10px 0 4px">
         ${c.status==='outreach'||c.status==='intake'?`<b>Current step:</b> ${c.step+1} of ${steps.length} — ${esc(stepLabel)}`:''}
@@ -2568,7 +2568,7 @@ async function drillIntoUser(userId, userName, office, mode){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
         ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('status','outreach','Pre-Opened — My Team',null)")}
         ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('status','intake','Pending — My Team',null)")}
-        ${miniStat('Active', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Active — My Team',null)")}
+        ${miniStat('Open', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Open — My Team',null)")}
         ${miniStat('Closed (All Time)', closedAllTeam, 'var(--red)', "statDrill('closed_all',null,'Closed Cases',null)")}
       </div>
 
@@ -2576,7 +2576,7 @@ async function drillIntoUser(userId, userName, office, mode){
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:16px 20px;margin-bottom:20px">
         <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Path C — Recovery Plan Progress</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          ${miniStat('Active Cases', activeCases.length, 'var(--navy)', "statDrill('status','open','Active Cases',null)")}
+          ${miniStat('Open Cases', activeCases.length, 'var(--navy)', "statDrill('status','open','Open Cases',null)")}
           ${miniStat('Path C Complete', pathCComplete, 'var(--green)', "statDrill('path_c_complete',null,'Path C Complete — My Team',null)")}
           ${miniStat('Recovery Plan %', pathCPct+'%', pathCPct===100?'var(--green)':pathCPct>50?'var(--blue)':'var(--amber)')}
         </div>
@@ -2661,7 +2661,7 @@ async function drillIntoUser(userId, userName, office, mode){
           datasets: [
             { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
             { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-            { label:'Active', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
             { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
           ]
         },
@@ -3173,7 +3173,7 @@ async function renderBriefing(){
         ${briefingStat('Total Caseload',active.length,'var(--navy)')}
         ${briefingStat('Pre-Opened',outreachCases.length,'var(--amber)')}
         ${briefingStat('Pending',intakeCases.length,'var(--blue)')}
-        ${briefingStat('Active',openCases.length,'var(--green)')}
+        ${briefingStat('Open',openCases.length,'var(--green)')}
         ${briefingStat('Due/Overdue',totalDue,totalDue>0?'var(--red)':'var(--green)')}
         ${briefingStat('Logged Today',loggedToday,'var(--gray)')}
       </div>
@@ -3250,7 +3250,7 @@ function renderDash(){
       return `<div class="case-card open">
         <div class="case-head">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span class="case-id">#${c.id}<span class="tag open">Active</span></span>
+            <span class="case-id">#${c.id}<span class="tag open">Open</span></span>
             ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
             ${tierBadge(c.tier)}
           </div>
@@ -3329,7 +3329,7 @@ function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&'
 // Display-only labels — the underlying status values (outreach/intake/open/etc.)
 // never change in the database, RLS, or sorting logic. This only renames what's shown.
 function statusLabel(status){
-  const map={ outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
+  const map={ outreach:'Pre-Opened', intake:'Pending', open:'Open', completed:'Completed', closed:'Closed', declined:'Declined' };
   return map[status] || (status ? status.charAt(0).toUpperCase()+status.slice(1) : '—');
 }
 
@@ -3391,7 +3391,7 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
     const cmNameById = {};
     (allProfiles||[]).forEach(p=>{ cmNameById[p.id] = p.full_name || p.email; });
     const statusColor = { outreach:'var(--amber)', intake:'var(--blue)', open:'var(--green)', completed:'var(--navy)', closed:'var(--gray-light)', declined:'var(--red)' };
-    const statusLabel = { outreach:'Pre-Opened', intake:'Pending', open:'Active', completed:'Completed', closed:'Closed', declined:'Declined' };
+    const statusLabel = { outreach:'Pre-Opened', intake:'Pending', open:'Open', completed:'Completed', closed:'Closed', declined:'Declined' };
     let rows = [];
 
     if(filterType === 'status'){
@@ -3658,7 +3658,7 @@ async function openClientProfile(id, silent=false){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
         <div class="profile-stat"><div class="profile-stat-val" style="color:${statusColor}">${statusLabel(c.status)}</div><div class="profile-stat-lbl">Status</div></div>
         <div class="profile-stat"><div class="profile-stat-val">${fmt(c.assigned)||'—'}</div><div class="profile-stat-lbl">Assigned</div></div>
-        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Active'}</div><div class="profile-stat-lbl">Closed</div></div>
+        <div class="profile-stat"><div class="profile-stat-val">${c.closed?fmt(c.closed):'Open'}</div><div class="profile-stat-lbl">Closed</div></div>
       </div>
       <div style="font-size:13px;color:var(--gray);padding:10px 0 4px">
         ${c.status==='outreach'||c.status==='intake'?`<b>Current step:</b> ${c.step+1} of ${steps.length} — ${esc(stepLabel)}`:''}
