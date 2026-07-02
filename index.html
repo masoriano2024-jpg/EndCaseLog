@@ -2160,6 +2160,17 @@ async function flagCaseForReview(caseId, currentlyFlagged){
 
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
 function renderReadOnlyCard(c){
+  if(!['outreach','intake','open'].includes(c.status)){
+    // closed / completed / declined — muted, clickable into the read-only profile
+    const tagCls = c.status==='declined' ? 'declined' : 'closed';
+    return `<div class="case-card" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer;opacity:.85;border-left-color:var(--gray-light)">
+      <div class="case-head">
+        <div><span class="case-id">#${c.id}<span class="tag ${tagCls}">${statusLabel(c.status)}</span></span>
+          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <span class="due-chip" style="background:#e8edf2;color:var(--gray)">${c.closed?'Closed '+fmt(c.closed):'Closed'}</span>
+      </div>
+    </div>`;
+  }
   if(c.status==='open'){
     const pathCSteps = stepsFor(c);
     const stepC = c.pathCStep || 0;
@@ -2228,12 +2239,32 @@ function renderReadOnlyCard(c){
 
 let teamDrillUserCases = [];
 let teamDrillUserName = null;
+let teamCaseloadMode = null; // 'dashboard' | 'roster' | null (panel hidden)
 
 function renderTeamCaseloadList(){
   const el = document.getElementById('userCaseloadView');
   if(!el) return;
-  const active = teamDrillUserCases.filter(c=>['outreach','intake','open'].includes(c.status));
   const rank={outreach:0,intake:1,open:2};
+  const isActive=c=>['outreach','intake','open'].includes(c.status);
+
+  if(teamCaseloadMode==='roster'){
+    const all = [...teamDrillUserCases].sort((a,b)=>{
+      const aa=isActive(a), ba=isActive(b);
+      if(aa!==ba) return aa?-1:1;                 // active before closed
+      if(aa){
+        if(a.status!==b.status) return rank[a.status]-rank[b.status];
+        if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
+        return 0;
+      }
+      return (b.closed||'').localeCompare(a.closed||''); // both closed: newest first
+    });
+    el.innerHTML = all.length===0
+      ? `<div class="empty">No cases on ${esc(teamDrillUserName||'this user')}'s roster.</div>`
+      : `<p class="sec-note" style="margin-bottom:10px">Full roster — active and cleared cases. Click a case to see full contact history, audit history, notes, and tasks.</p><div style="display:grid;gap:14px">${all.map(renderReadOnlyCard).join('')}</div>`;
+    return;
+  }
+
+  const active = teamDrillUserCases.filter(isActive);
   active.sort((a,b)=>{
     if(a.status!==b.status) return rank[a.status]-rank[b.status];
     if(a.status==='outreach') return daysUntil(dueDateFor(a,a.step))-daysUntil(dueDateFor(b,b.step));
@@ -2244,19 +2275,32 @@ function renderTeamCaseloadList(){
     : `<p class="sec-note" style="margin-bottom:10px">Click a case to see full contact history, audit history, notes, and tasks.</p><div style="display:grid;gap:14px">${active.map(renderReadOnlyCard).join('')}</div>`;
 }
 
-function toggleUserCaseload(userId, userName){
+function updateCaseloadButtons(userName){
+  const el = document.getElementById('userCaseloadView');
+  const open = el && el.style.display!=='none';
+  const dashBtn = document.getElementById('toggleCaseloadBtn');
+  const rosterBtn = document.getElementById('toggleRosterBtn');
+  if(dashBtn) dashBtn.textContent = (open && teamCaseloadMode==='dashboard')
+    ? `🔼 Hide ${esc(userName)}'s Dashboard` : `View ${esc(userName)}'s Dashboard`;
+  if(rosterBtn) rosterBtn.textContent = (open && teamCaseloadMode==='roster')
+    ? `🔼 Hide ${esc(userName)}'s Roster` : `View ${esc(userName)}'s Roster`;
+}
+
+function toggleUserCaseload(userId, userName, viewMode){
+  viewMode = viewMode || 'dashboard';
   teamDrillUserName = userName;
   const el = document.getElementById('userCaseloadView');
-  const btn = document.getElementById('toggleCaseloadBtn');
   if(!el) return;
-  if(el.style.display==='none'){
+  const open = el.style.display!=='none';
+  if(open && teamCaseloadMode===viewMode){
+    el.style.display='none';       // same button clicked again → hide
+    teamCaseloadMode=null;
+  } else {
+    teamCaseloadMode=viewMode;      // open or switch to this mode
     renderTeamCaseloadList();
     el.style.display='block';
-    btn.textContent = `🔼 Hide ${esc(userName)}'s Dashboard`;
-  } else {
-    el.style.display='none';
-    btn.textContent = `👁 View ${esc(userName)}'s Dashboard`;
   }
+  updateCaseloadButtons(userName);
 }
 
 /* ---------- FULL CLIENT PROFILE (read-only, from Team tab) ---------- */
@@ -2576,7 +2620,8 @@ async function drillIntoUser(userId, userName, office, mode){
       </div>
 
       <div style="margin-top:24px">
-        <button class="btn sm ghost" onclick="toggleUserCaseload('${userId}','${esc(userName)}')" id="toggleCaseloadBtn">👁 View ${esc(userName)}'s Dashboard</button>
+        <button class="btn sm ghost" onclick="toggleUserCaseload('${userId}','${esc(userName)}','dashboard')" id="toggleCaseloadBtn">View ${esc(userName)}'s Dashboard</button>
+        <button class="btn sm ghost" onclick="toggleUserCaseload('${userId}','${esc(userName)}','roster')" id="toggleRosterBtn" style="margin-left:8px">View ${esc(userName)}'s Roster</button>
         <div id="userCaseloadView" style="display:none;margin-top:16px"></div>
       </div>
     `;
