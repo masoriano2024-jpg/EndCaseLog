@@ -348,7 +348,7 @@
   <div style="background:#fff;border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-family:'Poppins',sans-serif;font-size:20px;font-weight:800;color:#1B2A4A">Set New Password</div>
-      <div style="font-size:13px;color:#64748b;margin-top:6px">Choose a new password for your account.</div>
+      <div id="newPasswordSub" style="font-size:13px;color:#64748b;margin-top:6px">Choose a new password for your account.</div>
     </div>
     <div style="margin-bottom:16px">
       <label style="display:block;font-size:12px;font-weight:700;color:#1B2A4A;margin-bottom:6px;font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.5px">New Password</label>
@@ -568,6 +568,7 @@
           <div>
             <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Temporary Password</label>
             <input type="text" id="newUserPassword" placeholder="Min 6 characters" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+            <div style="font-size:11px;color:var(--gray);margin-top:5px;font-family:'Open Sans',sans-serif">They'll be required to change this the first time they log in.</div>
           </div>
           <div>
             <label style="display:block;font-size:11px;font-weight:700;color:var(--navy);font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Role</label>
@@ -846,6 +847,11 @@ async function submitNewPassword(){
   try{
     const { error } = await sb.auth.updateUser({ password: p1 });
     if(error) throw error;
+    // Clear the temporary-password flag so future logins go straight to the app.
+    const { data: { user: pwUser } } = await sb.auth.getUser();
+    if(pwUser){
+      await sb.from('profiles').update({ must_change_password: false }).eq('id', pwUser.id);
+    }
     msg.style.color = '#166534';
     msg.textContent = '✓ Password updated! Redirecting…';
     setTimeout(async()=>{
@@ -888,6 +894,17 @@ async function bootApp(user){
     document.getElementById('loginScreen').style.display = 'flex';
     const errEl = document.getElementById('loginError');
     if(errEl) errEl.textContent = 'This account is not active yet. Contact your administrator.';
+    return;
+  }
+
+  // Temporary-password gate: force a first-login password change before entry.
+  if(profile && profile.must_change_password === true){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = 'none';
+    const sub = document.getElementById('newPasswordSub');
+    if(sub) sub.textContent = 'Your account uses a temporary password. Set your own password to continue.';
+    const nps = document.getElementById('newPasswordScreen');
+    nps.style.display = 'flex';
     return;
   }
 
@@ -960,7 +977,8 @@ async function createUser(){
         full_name: name,
         role,
         office,
-        active: activateNow
+        active: activateNow,
+        must_change_password: true
       });
     }
 
@@ -1245,6 +1263,7 @@ async function loadAdminUsers(){
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
             <button onclick="event.stopPropagation();toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:4px;padding:2px 7px;font-size:9px;font-family:'Poppins',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
+            <button onclick="event.stopPropagation();adminSendReset('${esc(u.email)}',this)" style="background:#e0edff;border:none;border-radius:4px;padding:2px 7px;font-size:9px;font-family:'Poppins',sans-serif;font-weight:700;color:#0050b4;cursor:pointer" title="Email this person a password reset link">Reset PW</button>
             <div style="color:var(--gray-light);font-size:15px;cursor:grab;line-height:1;padding-top:2px" title="Drag to reassign">⠿</div>
           </div>
         </div>`;
@@ -1356,6 +1375,25 @@ async function assignSupervisor(caseManagerId, supervisorId){
     await sb.from('profiles').update({ supervisor_id: supervisorId || null }).eq('id', caseManagerId);
     loadAdminUsers();
   }catch(e){ console.error('assign supervisor failed', e); alert('Failed to update supervisor assignment.'); }
+}
+
+// Admin: email a staff member a password-reset link (for locked-out users).
+async function adminSendReset(email, btn){
+  if(!isAdmin()) return;
+  if(!email){ alert('This staff member has no email on file.'); return; }
+  if(!confirm('Send a password reset email to ' + email + '?')) return;
+  const original = btn ? btn.textContent : '';
+  if(btn){ btn.textContent = 'Sending…'; btn.disabled = true; }
+  try{
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if(error) throw error;
+    if(btn){ btn.textContent = '✓ Sent'; }
+  }catch(e){
+    alert('Could not send reset email: ' + e.message);
+    if(btn){ btn.textContent = original; btn.disabled = false; }
+  }
 }
 
 /* ---------- ADMIN DRAG-AND-DROP HANDLERS ---------- */
