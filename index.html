@@ -551,6 +551,9 @@
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
 
+      <!-- LEFT COLUMN: Create User + Admins & Managers -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
       <!-- CREATE USER -->
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
         <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
@@ -596,6 +599,22 @@
         </div>
       </div>
 
+      <!-- ADMINS & MANAGERS LIST -->
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
+        <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
+          <span>👑 Admins &amp; Managers</span>
+          <button onclick="loadAdminUsers()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer">↻ Refresh</button>
+        </div>
+        <div id="adminUserList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:80px">
+          <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>
+        </div>
+      </div>
+
+      </div><!-- end LEFT COLUMN -->
+
+      <!-- RIGHT COLUMN: Bulk Import + All Users -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
       <!-- BULK IMPORT CASES -->
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
         <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
@@ -611,16 +630,21 @@
         </div>
       </div>
 
-      <!-- ADMINS & MANAGERS LIST -->
+      <!-- ALL USERS LIST -->
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden">
         <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
-          <span>👑 Admins &amp; Managers</span>
+          <span>👥 All Users</span>
           <button onclick="loadAdminUsers()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer">↻ Refresh</button>
         </div>
-        <div id="adminUserList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:80px">
+        <div style="padding:12px 16px 0">
+          <input type="text" id="allUserSearch" oninput="filterAllUsers()" placeholder="🔍 Search by name or email…" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid var(--line);border-radius:6px;font-size:13px;font-family:'Open Sans',sans-serif">
+        </div>
+        <div id="allUserList" style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px;min-height:80px;max-height:520px;overflow-y:auto">
           <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>
         </div>
       </div>
+
+      </div><!-- end RIGHT COLUMN -->
 
     </div>
 
@@ -1185,11 +1209,22 @@ function fmtLastLogin(ts){
 
 let adminDragCmId = null;
 
+function filterAllUsers(){
+  const box = document.getElementById('allUserSearch');
+  const q = (box ? box.value : '').trim().toLowerCase();
+  document.querySelectorAll('#allUserList .all-user-row').forEach(row=>{
+    const hit = !q || (row.dataset.name||'').includes(q) || (row.dataset.email||'').includes(q);
+    row.style.display = hit ? '' : 'none';
+  });
+}
+
 async function loadAdminUsers(){
   const el = document.getElementById('adminUserList');
   const board = document.getElementById('supervisorBoard');
+  const allEl0 = document.getElementById('allUserList');
   if(el) el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
   if(board) board.innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light);font-size:13px">Loading…</div>';
+  if(allEl0) allEl0.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
 
   try{
     const { data, error } = await sb.from('profiles').select('*').order('full_name');
@@ -1197,6 +1232,7 @@ async function loadAdminUsers(){
     if(!data || data.length === 0){
       if(el) el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
       if(board) board.innerHTML = '';
+      if(allEl0) allEl0.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">No users yet.</div>';
       return;
     }
 
@@ -1233,6 +1269,36 @@ async function loadAdminUsers(){
           </div>`;
         }).join('');
       }
+    }
+
+    /* ---- #allUserList : Everyone, one flat searchable list ---- */
+    const allEl = document.getElementById('allUserList');
+    if(allEl){
+      allEl.innerHTML = data.map(u=>{
+        const ll = fmtLastLogin(u.last_login);
+        const nm = (u.full_name||u.email||'').toLowerCase();
+        const em = (u.email||'').toLowerCase();
+        return `
+        <div class="all-user-row" data-name="${esc(nm)}" data-email="${esc(em)}" style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:${u.active?'var(--white)':'#f8fafc'}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:13px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.full_name||u.email)}</div>
+              <div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(u.email||'')}</div>
+              <div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">
+                <span style="font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${roleBg[u.role]||'#f1f5f9'};color:${roleColors[u.role]||'#334155'}">${roleLabel(u.role)}</span>
+                <span style="font-size:10px;background:#f1f5f9;color:var(--gray);padding:2px 7px;border-radius:4px">${esc(u.office||'—')}</span>
+                <span style="font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:${loginTierBg[ll.tier]};color:${loginTierColor[ll.tier]}">${esc(ll.label)}</span>
+                ${u.active?'':`<span style="font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;padding:2px 7px;border-radius:4px;background:#fee2e2;color:#991b1b">Inactive</span>`}
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
+              <button onclick="toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:5px;padding:5px 10px;font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer;white-space:nowrap">${u.active?'Deactivate':'Activate'}</button>
+              <button onclick="adminSendReset('${esc(u.email)}',this)" style="background:#e0edff;border:none;border-radius:5px;padding:5px 10px;font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;color:#0050b4;cursor:pointer;white-space:nowrap" title="Email this person a password reset link">Reset PW</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      filterAllUsers();
     }
 
     /* ---- #supervisorBoard : Drag-and-drop assignment board ---- */
@@ -1359,6 +1425,7 @@ async function loadAdminUsers(){
     console.error('loadAdminUsers failed', e);
     if(el) el.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
     if(board) board.innerHTML = '<div style="font-size:13px;color:var(--red);padding:20px">Failed to load assignment board.</div>';
+    if(allEl0) allEl0.innerHTML = '<div style="font-size:13px;color:var(--red)">Failed to load users.</div>';
   }
 }
 
