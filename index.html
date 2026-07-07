@@ -1021,12 +1021,23 @@ async function createUser(){
 
 /* ---------- ADMIN: BULK IMPORT CASES FROM EXCEL ---------- */
 const IMPORT_STATUS_MAP = {
+  // Full labels (exactly as they appear in the app's dropdown)
   'pre-opened (no contact)':'outreach',
   'pending (intake)':'intake',
   'active (open client)':'open',
   'completed':'completed',
   'closed (no contact made)':'closed',
-  'declined':'declined'
+  'declined':'declined',
+  // Short-word aliases, so a plain "Pending" or "Active" also imports
+  'pre-opened':'outreach',
+  'preopened':'outreach',
+  'outreach':'outreach',
+  'pending':'intake',
+  'intake':'intake',
+  'active':'open',
+  'open':'open',
+  'closed':'closed',
+  'complete':'completed'
 };
 let importPendingRows = [];
 
@@ -4811,5 +4822,3 @@ async function auditLoadFromSupabase(clientId){
 </script>
 </body>
 </html>
-
-
