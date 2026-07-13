@@ -549,6 +549,20 @@
   <section class="panel" id="admin">
     <h2 class="sec">Admin Panel</h2>
 
+    <!-- DATA BACKUP -->
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden;margin-bottom:20px">
+      <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px">
+        💾 Data Backup
+      </div>
+      <div style="padding:20px">
+        <p style="font-size:13px;color:var(--gray);font-family:'Open Sans',sans-serif;margin:0 0 12px">
+          Download a full backup of all app data (Excel + JSON). Run this regularly — the free plan has no automatic backups. These files contain real survivor data, so store them somewhere secure.
+        </p>
+        <button class="btn green" id="backupBtn" onclick="backupAllData()" style="width:100%">⬇ Back up all data</button>
+        <div id="backupMsg" style="font-size:12px;font-weight:700;min-height:16px;text-align:center;margin-top:8px;color:var(--gray)"></div>
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
 
       <!-- LEFT COLUMN: Create User + Admins & Managers -->
@@ -3995,6 +4009,76 @@ function exportCSV(){
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='weekly_report_'+todayISO()+'.csv';a.click();
+}
+
+// ---- Data backup (admin-only): download all tables as Excel + JSON ----
+const BACKUP_TABLES = ['cases','profiles','contact_logs','case_notes','client_todos','roster','todos','weekly_report','support_tickets','step_templates','audit_entries'];
+
+function setBackupMsg(text, color){
+  const m = document.getElementById('backupMsg');
+  if(m){ m.textContent = text; m.style.color = color || 'var(--gray)'; }
+}
+
+// Fetch EVERY row of a table, paging past Supabase's 1000-row default cap.
+// `client` defaults to the app's Supabase client; injectable for testing.
+async function fetchAllRows(table, client){
+  const c = client || sb;
+  const PAGE = 1000;
+  let from = 0, all = [];
+  while(true){
+    const { data, error } = await c.from(table).select('*').range(from, from + PAGE - 1);
+    if(error){ const e = new Error(error.message); e.table = table; throw e; }
+    all = all.concat(data || []);
+    if(!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+function buildBackupJSON(data){
+  return new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+}
+
+function buildBackupWorkbook(data){
+  const wb = XLSX.utils.book_new();
+  BACKUP_TABLES.forEach(t=>{
+    const rows = data[t] || [];
+    const ws = rows.length ? XLSX.utils.json_to_sheet(rows) : XLSX.utils.aoa_to_sheet([['(no rows)']]);
+    XLSX.utils.book_append_sheet(wb, ws, t.substring(0,31)); // sheet names max 31 chars
+  });
+  const out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  return new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+function triggerDownload(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+async function backupAllData(){
+  if(!isAdmin()){ return; }
+  const btn = document.getElementById('backupBtn');
+  if(btn) btn.disabled = true;
+  const data = {}; const empties = [];
+  try{
+    for(const t of BACKUP_TABLES){
+      setBackupMsg('Backing up ' + t + '…', 'var(--gray)');
+      const rows = await fetchAllRows(t);
+      data[t] = rows;
+      if(rows.length === 0) empties.push(t);
+    }
+  }catch(e){
+    setBackupMsg('Backup failed on “' + (e.table || '?') + '”: ' + (e.message || e) + '. No files were saved.', 'var(--red)');
+    if(btn) btn.disabled = false;
+    return;
+  }
+  const stamp = todayISO();
+  triggerDownload(buildBackupJSON(data), 'dcm-backup_' + stamp + '.json');
+  triggerDownload(buildBackupWorkbook(data), 'dcm-backup_' + stamp + '.xlsx');
+  setBackupMsg('Done — 2 files downloaded.' + (empties.length ? ' ⚠ Empty tables: ' + empties.join(', ') : ''), 'var(--green)');
+  if(btn) btn.disabled = false;
 }
 
 /* ---------- STEPS EDITOR ---------- */
