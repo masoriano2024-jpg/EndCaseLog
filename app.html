@@ -4051,10 +4051,14 @@ function buildBackupWorkbook(data){
 }
 
 function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);   // attached to DOM = reliable across browsers
   a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
 }
 
 async function backupAllData(){
@@ -4076,8 +4080,10 @@ async function backupAllData(){
   }
   const stamp = todayISO();
   triggerDownload(buildBackupJSON(data), 'dcm-backup_' + stamp + '.json');
+  // Space the two downloads apart — browsers drop a second download fired in the same instant.
+  await new Promise(r => setTimeout(r, 1200));
   triggerDownload(buildBackupWorkbook(data), 'dcm-backup_' + stamp + '.xlsx');
-  setBackupMsg('Done — 2 files downloaded.' + (empties.length ? ' ⚠ Empty tables: ' + empties.join(', ') : ''), 'var(--green)');
+  setBackupMsg('Done — 2 files downloaded (allow multiple downloads if your browser asks).' + (empties.length ? ' ⚠ Empty tables: ' + empties.join(', ') : ''), 'var(--green)');
   if(btn) btn.disabled = false;
 }
 
