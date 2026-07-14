@@ -2365,7 +2365,7 @@ function renderReadOnlyCard(c){
   if(!['outreach','intake','open'].includes(c.status)){
     // closed / completed / declined — muted, clickable into the read-only profile
     const tagCls = c.status==='declined' ? 'declined' : 'closed';
-    return `<div class="case-card" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer;opacity:.85;border-left-color:var(--gray-light)">
+    return `<div class="case-card" onclick="openTeamClientProfile('${c.id}')" style="cursor:pointer;opacity:.85;border-left-color:var(--gray-light)">
       <div class="case-head">
         <div><span class="case-id">#${c.id}<span class="tag ${tagCls}">${statusLabel(c.status)}</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -2378,7 +2378,7 @@ function renderReadOnlyCard(c){
     const stepC = c.pathCStep || 0;
     const pathCDone = stepC >= pathCSteps.length;
     const pathCLabel = pathCDone ? `All ${pathCSteps.length} step(s) complete ✓` : `Step ${stepC+1} of ${pathCSteps.length}: ${pathCSteps[stepC]?.t||''}`;
-    return `<div class="case-card open" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
+    return `<div class="case-card open" onclick="openTeamClientProfile('${c.id}')" style="cursor:pointer">
       <div class="case-head">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span class="case-id">#${c.id}<span class="tag open">Open</span></span>
@@ -2392,14 +2392,14 @@ function renderReadOnlyCard(c){
       <div class="progress" style="margin-bottom:6px"><i style="width:${pathCDone?100:pathCSteps.length>1?(stepC/(pathCSteps.length-1))*100:0}%"></i></div>
       <div class="case-actions">
         <span style="flex:1"></span>
-        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick('${c.id}',${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
       </div>
     </div>`;
   }
   if(c.status==='intake'){
     const steps=stepsFor(c);
     const total=steps.length;
-    return `<div class="case-card intake" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
+    return `<div class="case-card intake" onclick="openTeamClientProfile('${c.id}')" style="cursor:pointer">
       <div class="case-head">
         <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span>
           ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -2410,7 +2410,7 @@ function renderReadOnlyCard(c){
       <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
         <span style="flex:1"></span>
-        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick('${c.id}',${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
       </div>
     </div>`;
   }
@@ -2423,7 +2423,7 @@ function renderReadOnlyCard(c){
   else if(du<=1){cls='soon';chip='amber';chiptxt='Due tomorrow';}
   else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
   const steps=stepsFor(c);const total=steps.length;
-  return `<div class="case-card ${cls}" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
+  return `<div class="case-card ${cls}" onclick="openTeamClientProfile('${c.id}')" style="cursor:pointer">
     <div class="case-head">
       <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span>
         ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
@@ -2434,7 +2434,7 @@ function renderReadOnlyCard(c){
     <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
     <div class="case-actions">
       <span style="flex:1"></span>
-      <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick(${c.id},${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+      <button class="btn sm ${c.flaggedForReview?'ghost':'amber'}" onclick="event.stopPropagation();handleFlagClick('${c.id}',${!!c.flaggedForReview})">${c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
     </div>
   </div>`;
 }
@@ -2577,13 +2577,13 @@ async function openTeamClientProfile(id){
           <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
           ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
-        ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, teamAfterDelete)">🗑 Delete Case</button>`:''}
+        ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm('${id}', teamAfterDelete)">🗑 Delete Case</button>`:''}
       </div>
 
       <!-- FLAG -->
       <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
         ${c&&c.flaggedForReview?flagBadge(c):'<div style="font-size:12px;color:var(--gray-light)">Not currently flagged.</div>'}
-        <button class="btn sm ${c&&c.flaggedForReview?'ghost':'amber'}" style="margin-top:8px" onclick="handleFlagClickInProfile(${id},${!!(c&&c.flaggedForReview)})">${c&&c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        <button class="btn sm ${c&&c.flaggedForReview?'ghost':'amber'}" style="margin-top:8px" onclick="handleFlagClickInProfile('${id}',${!!(c&&c.flaggedForReview)})">${c&&c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
       </div>
 
       <!-- CASE STATUS -->
@@ -3466,11 +3466,11 @@ function renderDash(){
         </div>
         <div class="progress" style="margin-bottom:10px"><i style="width:${pathCDone?100:totalC>1?(stepC/(totalC-1))*100:0}%"></i></div>
         <div class="case-actions">
-          <button class="btn sm ghost" onclick="reopenIntake(${c.id})" title="Move back to intake">← Back to Intake</button>
+          <button class="btn sm ghost" onclick="reopenIntake('${c.id}')" title="Move back to intake">← Back to Intake</button>
           <span style="flex:1"></span>
-          ${!pathCDone ? `<button class="btn sm gold" onclick="advancePathC(${c.id})">${lastStepC?'✓ Complete Path C':'Next Step →'}</button>` : ''}
-          <button class="btn sm green" onclick="closeOpenCase(${c.id})">Close Case ✓</button>
-          <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+          ${!pathCDone ? `<button class="btn sm gold" onclick="advancePathC('${c.id}')">${lastStepC?'✓ Complete Path C':'Next Step →'}</button>` : ''}
+          <button class="btn sm green" onclick="closeOpenCase('${c.id}')">Close Case ✓</button>
+          <button class="btn sm ghost" onclick="deleteClient('${c.id}')" title="Delete entirely">🗑</button>
         </div>
       </div>`;
     }
@@ -3488,13 +3488,13 @@ function renderDash(){
         <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
         <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
         <div class="case-actions">
-          <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
-          <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
-          ${!lastStep?`<button class="btn sm green" onclick="markOpen(${c.id})" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
-          <button class="btn sm ghost" onclick="reopenOutreach(${c.id})" title="Move back to outreach">← Back to Outreach</button>
+          <button class="btn sm ghost" onclick="prevStep('${c.id}')" ${c.step===0?'disabled':''}>← Previous</button>
+          <button class="btn sm gold" onclick="nextStep('${c.id}')">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
+          ${!lastStep?`<button class="btn sm green" onclick="markOpen('${c.id}')" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
+          <button class="btn sm ghost" onclick="reopenOutreach('${c.id}')" title="Move back to outreach">← Back to Outreach</button>
           <span style="flex:1"></span>
-          <button class="btn sm red" onclick="closeIntakeCase(${c.id})">Close Case</button>
-          <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+          <button class="btn sm red" onclick="closeIntakeCase('${c.id}')">Close Case</button>
+          <button class="btn sm ghost" onclick="deleteClient('${c.id}')" title="Delete entirely">🗑</button>
         </div>
       </div>`;
     }
@@ -3517,12 +3517,12 @@ function renderDash(){
       <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
       <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
       <div class="case-actions">
-        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
-        <button class="btn sm gold" onclick="nextStep(${c.id})" ${c.step===total-1?'disabled':''}>Next Step →</button>
-        <button class="btn sm green" onclick="openDecide(${c.id})">Made Contact…</button>
+        <button class="btn sm ghost" onclick="prevStep('${c.id}')" ${c.step===0?'disabled':''}>← Previous</button>
+        <button class="btn sm gold" onclick="nextStep('${c.id}')" ${c.step===total-1?'disabled':''}>Next Step →</button>
+        <button class="btn sm green" onclick="openDecide('${c.id}')">Made Contact…</button>
         <span style="flex:1"></span>
-        <button class="btn sm red" onclick="closeCase(${c.id},'closed')">Close (no contact)</button>
-        <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
+        <button class="btn sm red" onclick="closeCase('${c.id}','closed')">Close (no contact)</button>
+        <button class="btn sm ghost" onclick="deleteClient('${c.id}')" title="Delete entirely">🗑</button>
       </div>
     </div>`;
   }).join('');
@@ -3810,7 +3810,7 @@ function renderRoster(){
     const cnt=logs.filter(l=>l.id===id).length;
     const isActive=id===activeRosterId;
     const statusColor=st==='outreach'?'var(--amber)':st==='intake'?'var(--blue)':st==='open'?'var(--green)':'var(--gray-light)';
-    return `<div class="roster-line${isActive?' active-row':''}" onclick="openClientProfile(${id})" style="cursor:pointer">
+    return `<div class="roster-line${isActive?' active-row':''}" onclick="openClientProfile('${id}')" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-family:'Poppins',sans-serif;font-weight:700;color:var(--navy)">#${id}</span>
         <span style="font-size:11px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:.3px">${statusLabel(st)}</span>
@@ -3912,8 +3912,8 @@ async function openClientProfile(id, silent=false){
           ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName(${id},this.value);renderRoster()">
-          ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, rosterAfterDelete)">🗑 Delete Case</button>`:''}
+          <input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName('${id}',this.value);renderRoster()">
+          ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm('${id}', rosterAfterDelete)">🗑 Delete Case</button>`:''}
           <button class="btn sm ghost" style="color:var(--white);border-color:rgba(255,255,255,.3)" onclick="activeRosterId=null;document.getElementById('clientProfile').style.display='none';renderRoster()">✕ Close</button>
         </div>
       </div>
@@ -3941,14 +3941,14 @@ async function openClientProfile(id, silent=false){
       <div style="padding:16px 20px;border-top:1px solid var(--line)">
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Notes</div>
         <div id="rosterNotes_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
-        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes(${id})">Add / View All Notes →</button>
+        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes('${id}')">Add / View All Notes →</button>
       </div>
 
       <!-- CLIENT TO-DOS -->
       <div style="padding:16px 20px;border-top:1px solid var(--line)">
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Open Tasks</div>
         <div id="rosterClientTodos_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
-        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('clientTodoId').value='${id}';loadAndRenderClientTodos(${id})">Add / View All Tasks →</button>
+        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('clientTodoId').value='${id}';loadAndRenderClientTodos('${id}')">Add / View All Tasks →</button>
       </div>
 
     </div>`;
