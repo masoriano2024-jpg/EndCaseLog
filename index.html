@@ -134,5 +134,16 @@
     </section>
   </main>
   <footer>An Endeavors tool · Disaster Case Management</footer>
+  <script>
+    // Safety net: if a password-reset link ever lands on this landing page instead
+    // of the app, forward the visitor straight to the app WITH their reset token
+    // (which Supabase puts in the URL hash) so the "Set New Password" screen shows.
+    (function () {
+      var hash = window.location.hash || '';
+      if (hash.indexOf('type=recovery') !== -1 || hash.indexOf('access_token=') !== -1) {
+        window.location.replace('/app' + hash);
+      }
+    })();
+  </script>
 </body>
 </html>
