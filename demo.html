@@ -762,6 +762,37 @@
   </div>
 </div>
 
+<!-- EDIT CONTACT LOG MODAL -->
+<div class="modal-bg" id="editLogModal">
+  <div class="modal">
+    <h3>Edit Contact Log</h3>
+    <label>Method</label>
+    <div class="radio-row">
+      <label><input type="radio" name="editMethod" value="Call"><span>📞 Call</span></label>
+      <label><input type="radio" name="editMethod" value="Text"><span>💬 Text</span></label>
+      <label><input type="radio" name="editMethod" value="Email"><span>✉ Email</span></label>
+      <label><input type="radio" name="editMethod" value="In Person"><span>🤝 In Person</span></label>
+    </div>
+    <label>Date &amp; Time</label>
+    <div style="display:flex;gap:10px">
+      <input type="date" id="editLogDate" style="flex:1">
+      <input type="time" id="editLogTime" style="width:120px">
+    </div>
+    <label>Result (optional)</label>
+    <select id="editLogResult">
+      <option value="No answer">No answer / no contact</option>
+      <option value="Made contact">Made contact</option>
+      <option value="Left message">Left message / voicemail</option>
+    </select>
+    <label>Notes (optional)</label>
+    <textarea id="editLogNotes" placeholder="e.g. Spoke briefly, called back tomorrow." style="width:100%;min-height:80px;font-family:'Open Sans',sans-serif;font-size:13px;border:1.5px solid var(--line);border-radius:6px;padding:8px 10px;color:var(--ink);resize:vertical;box-sizing:border-box"></textarea>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('editLogModal')">Cancel</button>
+      <button class="btn gold" onclick="saveEditLog()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- DECISION MODAL -->
 <div class="modal-bg" id="decideModal">
   <div class="modal">
@@ -1723,6 +1754,20 @@ function getTeamDays(){
   }
   return lastNDays(21);
 }
+function stageStockSeries(cases, days, intakeKey, openedKey){
+  const preOpened=[], pending=[], open=[], closed=[];
+  days.forEach(d=>{
+    let po=0, pe=0, op=0, cl=0;
+    cases.forEach(c=>{
+      if(c.closed && c.closed<=d){ cl++; return; }
+      if(c[openedKey] && c[openedKey]<=d){ op++; return; }
+      if(c[intakeKey] && c[intakeKey]<=d){ pe++; return; }
+      if(c.started && c.started<=d){ po++; }
+    });
+    preOpened.push(po); pending.push(pe); open.push(op); closed.push(cl);
+  });
+  return { preOpened, pending, open, closed };
+}
 function teamRangeLabel(){
   const days=getTeamDays();
   if(days.length===0) return '';
@@ -1899,7 +1944,12 @@ async function renderOfficeOverview(){
 
     <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
       <canvas id="statusTrendChart" height="80"></canvas>
-      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each point is that one day's activity — not a running total of your caseload.</p>
+      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each bar is that one day's activity — not a running total of your caseload.</p>
+    </div>
+
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+      <canvas id="stageStockChart" height="80"></canvas>
+      <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases were sitting in each stage on each day in the range — the running size of your caseload, not daily activity.</p>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
@@ -1961,19 +2011,43 @@ async function renderOfficeOverview(){
   if(trendCtx){
     const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
     const chart = new Chart(trendCtx, {
-      type: 'line',
+      type: 'bar',
       data: {
         labels: trendLabels,
         datasets: [
-          { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
-          { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-          { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
-          { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+          { label:'Pre-Opened', data:preOpenedDaily, backgroundColor:'#b45309' },
+          { label:'Pending', data:pendingDaily, backgroundColor:'#0077c8' },
+          { label:'Open', data:activeDaily, backgroundColor:'#166534' },
+          { label:'Closed', data:closedDaily, backgroundColor:'#64748b' }
         ]
       },
       options: {
         responsive: true,
         plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — All Offices — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+    teamChartInstances.push(chart);
+  }
+
+  const stockCtx = document.getElementById('stageStockChart');
+  if(stockCtx){
+    const stock = stageStockSeries(allOrgCases, days, 'intake_start', 'opened_at');
+    const stockLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    const chart = new Chart(stockCtx, {
+      type: 'line',
+      data: {
+        labels: stockLabels,
+        datasets: [
+          { label:'Pre-Opened', data:stock.preOpened, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+          { label:'Pending', data:stock.pending, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+          { label:'Open', data:stock.open, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+          { label:'Closed', data:stock.closed, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Caseload by Stage Over Time — All Offices — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -2178,7 +2252,12 @@ async function renderTeamOverview(scope){
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
         <canvas id="statusTrendChart" height="80"></canvas>
-        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each point is that one day's activity — not a running total of your caseload.</p>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each bar is that one day's activity — not a running total of your caseload.</p>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="stageStockChart" height="80"></canvas>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases were sitting in each stage on each day in the range — the running size of your caseload, not daily activity.</p>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
@@ -2246,19 +2325,43 @@ async function renderTeamOverview(scope){
     if(trendCtx){
       const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
       const chart = new Chart(trendCtx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: trendLabels,
           datasets: [
-            { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
-            { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-            { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
-            { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+            { label:'Pre-Opened', data:preOpenedDaily, backgroundColor:'#b45309' },
+            { label:'Pending', data:pendingDaily, backgroundColor:'#0077c8' },
+            { label:'Open', data:activeDaily, backgroundColor:'#166534' },
+            { label:'Closed', data:closedDaily, backgroundColor:'#64748b' }
           ]
         },
         options: {
           responsive: true,
           plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const stockCtx = document.getElementById('stageStockChart');
+    if(stockCtx){
+      const stock = stageStockSeries(officeCases, days, 'intake_start', 'opened_at');
+      const stockLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      const chart = new Chart(stockCtx, {
+        type: 'line',
+        data: {
+          labels: stockLabels,
+          datasets: [
+            { label:'Pre-Opened', data:stock.preOpened, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+            { label:'Pending', data:stock.pending, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+            { label:'Open', data:stock.open, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Closed', data:stock.closed, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Caseload by Stage Over Time — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -2810,7 +2913,12 @@ async function drillIntoUser(userId, userName, office, mode){
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
         <canvas id="statusTrendChart" height="80"></canvas>
-        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each point is that one day's activity — not a running total of your caseload.</p>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases moved into each stage on each day in the selected range. Each bar is that one day's activity — not a running total of your caseload.</p>
+      </div>
+
+      <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
+        <canvas id="stageStockChart" height="80"></canvas>
+        <p style="font-size:11px;color:var(--gray-light);text-align:center;margin-top:10px">How many cases were sitting in each stage on each day in the range — the running size of your caseload, not daily activity.</p>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -2863,19 +2971,43 @@ async function drillIntoUser(userId, userName, office, mode){
     if(trendCtx){
       const trendLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
       const chart = new Chart(trendCtx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: trendLabels,
           datasets: [
-            { label:'Pre-Opened', data:preOpenedDaily, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
-            { label:'Pending', data:pendingDaily, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
-            { label:'Open', data:activeDaily, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
-            { label:'Closed', data:closedDaily, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+            { label:'Pre-Opened', data:preOpenedDaily, backgroundColor:'#b45309' },
+            { label:'Pending', data:pendingDaily, backgroundColor:'#0077c8' },
+            { label:'Open', data:activeDaily, backgroundColor:'#166534' },
+            { label:'Closed', data:closedDaily, backgroundColor:'#64748b' }
           ]
         },
         options: {
           responsive: true,
           plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      teamChartInstances.push(chart);
+    }
+
+    const stockCtx = document.getElementById('stageStockChart');
+    if(stockCtx){
+      const stock = stageStockSeries(allCases, days, 'intakeStart', 'openedAt');
+      const stockLabels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      const chart = new Chart(stockCtx, {
+        type: 'line',
+        data: {
+          labels: stockLabels,
+          datasets: [
+            { label:'Pre-Opened', data:stock.preOpened, borderColor:'#b45309', backgroundColor:'rgba(180,83,9,.1)', tension:0.3, pointRadius:3 },
+            { label:'Pending', data:stock.pending, borderColor:'#0077c8', backgroundColor:'rgba(0,119,200,.1)', tension:0.3, pointRadius:3 },
+            { label:'Open', data:stock.open, borderColor:'#166534', backgroundColor:'rgba(22,101,52,.1)', tension:0.3, pointRadius:3 },
+            { label:'Closed', data:stock.closed, borderColor:'#64748b', backgroundColor:'rgba(100,116,139,.1)', tension:0.3, pointRadius:3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Caseload by Stage Over Time — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -3154,6 +3286,69 @@ async function adminDeleteCaseWithConfirm(id, afterDelete){
   if(typed.trim() !== String(id)) return; // wrong number — do nothing
   await deleteCase(id);
   if(typeof afterDelete === 'function') afterDelete();
+}
+
+// ---- EDIT / DELETE a contact log (from the Roster profile) ----
+let editingLogDbId = null;
+
+// Open the edit modal pre-filled with one log's values. dbId comes from the
+// row button as a string; match by String() because demo _dbId can be number or string.
+function openEditLog(dbId){
+  const l = logs.find(x=>String(x._dbId)===String(dbId));
+  if(!l){ alert('Could not find that contact log.'); return; }
+  editingLogDbId = l._dbId;
+  // Pre-select the method radio; fall back to the first radio if the stored
+  // method (e.g. legacy "Phone") matches none of the options, so Save always has a value.
+  const radios = document.querySelectorAll('input[name=editMethod]');
+  let matched = false;
+  radios.forEach(r=>{ r.checked = (r.value===l.method); if(r.checked) matched = true; });
+  if(!matched && radios.length) radios[0].checked = true;
+  document.getElementById('editLogDate').value = l.date || '';
+  document.getElementById('editLogTime').value = l.time || '';
+  document.getElementById('editLogResult').value = l.result || 'No answer';
+  document.getElementById('editLogNotes').value = l.notes || '';
+  show('editLogModal');
+}
+
+async function saveEditLog(){
+  const l = logs.find(x=>String(x._dbId)===String(editingLogDbId));
+  if(!l){ closeModal('editLogModal'); return; }
+  const methodEl = document.querySelector('input[name=editMethod]:checked');
+  const method = methodEl ? methodEl.value : l.method;
+  const date = document.getElementById('editLogDate').value || l.date;
+  const time = document.getElementById('editLogTime').value || '';
+  const result = document.getElementById('editLogResult').value;
+  const notes = document.getElementById('editLogNotes').value.trim();
+  syncStart();
+  try{
+    const {error} = await sb.from('contact_logs')
+      .update({ method, date, time:time||null, result, notes:notes||null })
+      .eq('id', l._dbId);
+    if(error) throw error;
+    // Reflect the change in memory so the profile updates without a reload.
+    l.method=method; l.date=date; l.time=time; l.result=result; l.notes=notes;
+    cacheWrite();
+    syncDone();
+  }catch(e){ syncErr('Log update failed'); cacheWrite(); }
+  closeModal('editLogModal');
+  renderAll();
+  if(activeRosterId) openClientProfile(activeRosterId, true);
+}
+
+async function deleteLog(dbId){
+  const l = logs.find(x=>String(x._dbId)===String(dbId));
+  if(!l) return;
+  if(!confirm("Delete this contact log? This can't be undone.")) return;
+  syncStart();
+  try{
+    const {error} = await sb.from('contact_logs').delete().eq('id', l._dbId);
+    if(error) throw error;
+    logs = logs.filter(x=>x!==l);
+    cacheWrite();
+    syncDone();
+  }catch(e){ syncErr('Log delete failed'); cacheWrite(); }
+  renderAll();
+  if(activeRosterId) openClientProfile(activeRosterId, true);
 }
 
 // ---- SAVE a contact log ----
@@ -3886,6 +4081,10 @@ async function openClientProfile(id, silent=false){
           <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}${l.time?` <span style="font-weight:500;color:var(--gray-light)">${l.time}</span>`:''}</span>
           <span style="font-size:11px;background:var(--blue-bg);border-radius:4px;padding:2px 7px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
           <span style="font-size:11px;font-weight:700;color:${resultColor}">${resultIcon} ${l.result||'—'}</span>
+          <span style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn sm ghost" style="padding:2px 8px;font-size:11px" onclick="openEditLog('${l._dbId}')">✏️ Edit</button>
+            <button class="btn sm ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteLog('${l._dbId}')">🗑 Delete</button>
+          </span>
         </div>
         ${l.notes?`<div style="font-size:12px;color:var(--ink);background:var(--blue-bg);border-left:3px solid var(--line);border-radius:0 5px 5px 0;padding:6px 10px;margin-top:6px;line-height:1.5">${esc(l.notes)}</div>`:''}
       </div>`;
