@@ -3821,16 +3821,43 @@ function statusLabel(status){
 
 /* ---------- CASE ACTIONS ---------- */
 function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';document.getElementById('newName').value='';show('startModal')}
-function startCase(){
+async function startCase(){
   const id=parseInt(document.getElementById('newId').value);
   if(!id){alert('Enter a numerical ID.');return;}
+  // Local guard: an active case with this ID that this user can already see.
   if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'))){alert('That ID already has an active case.');return;}
   const name=document.getElementById('newName').value.trim();
-  if(name)roster[id]=name;
   const newCase={id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()};
+  // Create with INSERT (not upsert): a brand-new case must never overwrite an
+  // existing row. This also makes a colliding Client ID surface as a real
+  // duplicate error instead of silently trying to update another office's case.
+  syncStart();
+  const {error}=await sb.from('cases').insert({
+    id:newCase.id, assigned:newCase.assigned, status:newCase.status, step:newCase.step,
+    started:newCase.started, closed:null, intake_start:null, opened_at:null, custom_steps:null,
+    user_id: currentUser?.id || null, office: currentProfile?.office || null,
+    tier:null, path_c_step:0
+  });
+  if(error){
+    // 23505 = duplicate primary key; 42501 = row-level security blocked the write
+    // (the ID belongs to a case this user can't edit — typically another office).
+    // Either way the Client ID is already taken.
+    if(error.code==='23505' || error.code==='42501'){
+      alert('That Client ID is already in use — it may belong to another office. Please choose a different Client ID.');
+    } else {
+      alert('Could not create the case: '+(error.message||'unknown error')+'. Nothing was saved.');
+    }
+    syncErr('Save failed');
+    return;   // leave the modal open so the ID can be corrected; nothing added locally
+  }
+  if(name){
+    roster[id]=name;
+    await sb.from('roster').upsert({case_id:id,name},{onConflict:'case_id'});
+  }
   cases.push(newCase);
+  cacheWrite();
+  syncDone();
   closeModal('startModal');
-  saveCase(newCase);
   renderAll();
 }
 let tierPendingCaseId = null;
