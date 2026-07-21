@@ -546,6 +546,9 @@
 
   <!-- TEAM DASHBOARD -->
   <section class="panel" id="team">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <button class="btn sm" id="floodReportBtn" onclick="downloadFloodReport(this)">⬇ Download Flood Report</button>
+    </div>
     <div id="teamContent"></div>
   </section>
 
@@ -4040,6 +4043,85 @@ function rosterAfterDelete(){
   renderAll();
 }
 
+// ---- July 2026 Flood tracking (Roster profile) ----
+const RECOVERY_NEEDS = [
+  "Access and Functional Needs",
+  "Adult Education and Job Training",
+  "Children and Youth Services",
+  "Clothing",
+  "Community Connection",
+  "Domestic Animal Assistance",
+  "Emotional and Spiritual Care",
+  "Employment",
+  "FEMA Advocacy",
+  "Financial Services",
+  "Food and Nutrition",
+  "Household Furniture",
+  "Household Goods",
+  "Household Large Appliances",
+  "Household Storage",
+  "Housing - Permanent - Reconstruction",
+  "Housing - Permanent - Relocation",
+  "Housing - Temporary",
+  "Insurance Assistance",
+  "Legal Assistance",
+  "Medically-Related Needs",
+  "Mold Remediation",
+  "Other",
+  "Personal Assistance (paperwork filled out, bill and meeting reminders, scheduling)",
+  "Property Materials",
+  "Residential Cleaning and Debris Removal",
+  "Subsistence (farming, ranching, hunting, fishing, etc.)",
+  "Transportation",
+  "Utilities (HVAC, Electricity, Plumbing, Utility Payments)"
+];
+
+// Renders the flood checkbox + (when ticked) the Recovery Needs checklist for one case.
+function floodSectionHtml(c){
+  const on = !!c.flood_2026;
+  const needs = Array.isArray(c.recovery_needs) ? c.recovery_needs : [];
+  const needsRows = RECOVERY_NEEDS.map(n=>{
+    const checked = needs.includes(n) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:9px;margin:0;padding:5px 8px;font-size:13px;font-weight:500;color:var(--ink);text-transform:none;letter-spacing:0;line-height:1.3;cursor:pointer;border-radius:5px">
+      <input type="checkbox" data-need="${esc(n)}" ${checked} onchange="onRecoveryNeedToggle(${c.id})" style="width:16px;height:16px;flex-shrink:0;margin:0;cursor:pointer">
+      <span style="text-transform:none;letter-spacing:0">${esc(n)}</span></label>`;
+  }).join('');
+  return `
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+    <label style="display:flex;align-items:center;gap:9px;margin:0;font-size:14px;font-weight:700;color:var(--navy);text-transform:none;letter-spacing:0;cursor:pointer">
+      <input type="checkbox" id="floodFlag-${c.id}" ${on?'checked':''} onchange="onFloodFlagToggle(${c.id})" style="width:17px;height:17px;flex-shrink:0;margin:0;cursor:pointer">
+      Affected by July 2026 Flood
+    </label>
+    <div id="recoveryNeeds-${c.id}" style="margin-top:14px;${on?'':'display:none'}">
+      <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recovery Needs</div>
+      <div style="display:flex;flex-direction:column;gap:1px">${needsRows}</div>
+    </div>
+  </div>`;
+}
+
+// Saves the flood flag; shows/hides the needs list; keeps the in-memory case in sync.
+async function onFloodFlagToggle(id){
+  const box = document.getElementById('floodFlag-'+id);
+  const on = !!(box && box.checked);
+  const c = cases.find(x=>x.id===id);
+  if(c) c.flood_2026 = on;
+  const panel = document.getElementById('recoveryNeeds-'+id);
+  if(panel) panel.style.display = on ? '' : 'none';
+  try{ await sb.from('cases').update({ flood_2026: on }).eq('id', id); }
+  catch(e){ console.error('flood flag save failed', e); }
+}
+
+// Collects the ticked needs and saves them as a JSON array on the case.
+async function onRecoveryNeedToggle(id){
+  const panel = document.getElementById('recoveryNeeds-'+id);
+  if(!panel) return;
+  const needs = [...panel.querySelectorAll('input[type=checkbox]')].filter(b=>b.checked).map(b=>b.getAttribute('data-need'));
+  const c = cases.find(x=>x.id===id);
+  if(c) c.recovery_needs = needs;
+  try{ await sb.from('cases').update({ recovery_needs: needs }).eq('id', id); }
+  catch(e){ console.error('recovery needs save failed', e); }
+}
+
 async function openClientProfile(id, silent=false){
   activeRosterId=id;
   if(!silent) renderRoster();
@@ -4069,6 +4151,8 @@ async function openClientProfile(id, silent=false){
   } else {
     caseHtml='<div style="font-size:13px;color:var(--gray-light);padding:8px 0">No active case found.</div>';
   }
+  // Append the July 2026 Flood section under Case Status (only when a case exists).
+  if(c) caseHtml += floodSectionHtml(c);
 
   // contact logs section
   const logHtml=clientLogs.length===0
@@ -4274,6 +4358,65 @@ function renderWeekly(){
   });
   h+=`</tbody>`;
   t.innerHTML=h;
+}
+// Builds an Excel report of flood-affected cases. Admin/PM see all; a supervisor
+// sees only their own team (their case managers' cases, plus any of their own).
+async function downloadFloodReport(btn){
+  if(!(isSupervisor() || isAdmin() || isPM())) return;
+  if(btn) btn.disabled = true;
+  try{
+    const { data: floodCases, error } = await sb.from('cases').select('*').eq('flood_2026', true);
+    if(error) throw error;
+    const { data: profs } = await sb.from('profiles').select('id,full_name,email,supervisor_id,role');
+    const pmap = {};
+    (profs||[]).forEach(p=>{ pmap[p.id] = p; });
+    const nameOf = p => p ? (p.full_name || p.email || '—') : '—';
+
+    let rows = floodCases || [];
+    if(isSupervisor() && !isAdmin() && !isPM()){
+      const myId = currentProfile?.id;
+      rows = rows.filter(c=>{
+        const cm = pmap[c.user_id];
+        return c.user_id === myId || (cm && cm.supervisor_id === myId);
+      });
+    }
+
+    const out = rows.map(c=>{
+      const cm = pmap[c.user_id];
+      const sup = cm ? pmap[cm.supervisor_id] : null;
+      const needs = Array.isArray(c.recovery_needs) ? c.recovery_needs.join(', ') : '';
+      return {
+        'Client ID': c.id,
+        'Case Manager': nameOf(cm),
+        'Supervisor': nameOf(sup),
+        'Office': c.office || '—',
+        'Recovery Needs': needs
+      };
+    }).sort((a,b)=> String(a.Office+a['Case Manager']).localeCompare(String(b.Office+b['Case Manager'])));
+
+    if(out.length === 0){ alert('No flood-affected cases found for your team yet.'); return; }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(out, { header:['Client ID','Case Manager','Supervisor','Office','Recovery Needs'] });
+    XLSX.utils.book_append_sheet(wb, ws, 'Flood 2026');
+    const blob = new Blob([XLSX.write(wb, { bookType:'xlsx', type:'array' })], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    triggerDownload(blob, 'july-2026-flood-report_' + todayISO() + '.xlsx');
+  }catch(e){
+    console.error('flood report failed', e);
+    alert('Report failed: ' + (e.message || e));
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);   // attached to DOM = reliable across browsers
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
 }
 function exportCSV(){
   const headers=['Week Ending','Date','Client ID','Method','Notes'];
@@ -5162,6 +5305,10 @@ function buildDemoData(){
       }
     }
   });
+
+  // Demo seed: flag a couple of cases as July 2026 flood-affected.
+  if(cases[0]){ cases[0].flood_2026 = true; cases[0].recovery_needs = ["Clothing","Transportation","Mold Remediation"]; }
+  if(cases[1]){ cases[1].flood_2026 = true; cases[1].recovery_needs = ["Housing - Temporary","Food and Nutrition"]; }
 
   // ---- a few weeks of weekly-report rows ----
   const weekly_report = [
