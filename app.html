@@ -2776,12 +2776,15 @@ async function submitTransfer(){
   const msg = document.getElementById('transferMsg');
   if(!newOwner){ msg.style.color='var(--red)'; msg.textContent='Pick a case manager.'; return; }
   try{
-    const { data: cur } = await sb.from('cases').select('user_id').eq('id', caseId).single();
-    const fromId = cur?.user_id || null;
-    // 1. change owner
-    const { data: updRows, error: uErr } = await sb.from('cases').update({ user_id: newOwner }).eq('id', caseId).select('id');
+    const { data: cur, error: curErr } = await sb.from('cases').select('user_id').eq('id', caseId).single();
+    if(curErr || !cur) throw new Error('Could not find that case — it may have been removed.');
+    const fromId = cur.user_id || null;
+    // 1. change owner. NOTE: do NOT chain .select() here — once the owner changes, the
+    // person transferring the case away loses RLS read access to that row, so a read-back
+    // returns empty and would look like a failure even though the update succeeded. A real
+    // permission/RLS problem still surfaces as uErr; a missing case is caught by cur above.
+    const { error: uErr } = await sb.from('cases').update({ user_id: newOwner }).eq('id', caseId);
     if(uErr) throw uErr;
-    if(!updRows || updRows.length===0) throw new Error('The case could not be updated — it may have been removed, or you may not have permission.');
     // 2. write the audit log row
     const { error: tErr } = await sb.from('case_transfers').insert({
       case_id: caseId, from_user_id: fromId, to_user_id: newOwner,
