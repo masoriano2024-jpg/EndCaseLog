@@ -381,6 +381,20 @@
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:20px">
+    <div id="notifWrap" style="position:relative">
+      <button id="notifBell" onclick="toggleNotifPanel(event)" title="Notifications"
+        style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:8px;width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span id="notifCount" style="display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;background:#dc2626;color:#fff;border-radius:8px;font-size:10px;line-height:16px;font-weight:700;text-align:center;box-sizing:border-box">0</span>
+      </button>
+      <div id="notifPanel" style="display:none;position:absolute;top:46px;right:0;width:340px;max-height:420px;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);z-index:60">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--line);font-family:'Poppins',sans-serif;font-weight:700;font-size:13px;color:var(--navy)">Notifications</div>
+        <div id="notifList" style="padding:6px"></div>
+      </div>
+    </div>
     <div class="today">
       <span>Today</span>
       <b id="todayDate">—</b>
@@ -402,7 +416,7 @@
   <button data-tab="audit">Self-Audit</button>
   <button data-tab="notes">Notes</button>
   <button data-tab="team" id="teamTabBtn" style="display:none">Team</button>
-  <button data-tab="admin" id="adminTabBtn" style="display:none;position:relative">Admin<span id="ticketBadge" style="display:none;position:absolute;top:2px;right:4px;min-width:16px;height:16px;padding:0 4px;background:#dc2626;color:#fff;border-radius:8px;font-size:10px;line-height:16px;font-weight:700;text-align:center;box-sizing:border-box">0</span></button>
+  <button data-tab="admin" id="adminTabBtn" style="display:none">Admin</button>
 </nav>
 
 <main>
@@ -684,6 +698,17 @@
         <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading tickets…</div>
       </div>
     </div>
+
+    <!-- CASE TRANSFERS LOG (full width, admin/PM only) -->
+    <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);overflow:hidden;margin-top:20px">
+      <div style="background:var(--navy);padding:12px 18px;font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--white);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
+        <span>🔄 Case Transfers</span>
+        <button class="btn sm" id="transferReportBtn" onclick="downloadTransferReport(this)">⬇ Download (Excel)</button>
+      </div>
+      <div id="transferLogList" style="padding:16px;display:flex;flex-direction:column;gap:8px;min-height:60px">
+        <div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading transfers…</div>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -835,6 +860,23 @@
   </div>
 </div>
 
+<!-- TRANSFER CASE MODAL -->
+<div class="modal-bg" id="transferModal">
+  <div class="modal">
+    <h3>Transfer case</h3>
+    <input type="hidden" id="transferCaseId">
+    <label>New case manager</label>
+    <select id="transferNewOwner"><option value="">Select a case manager…</option></select>
+    <label>Note (optional)</label>
+    <textarea id="transferNote" placeholder="e.g. Intake complete — handing to ongoing services"></textarea>
+    <div id="transferMsg" style="font-size:12px;font-weight:700;min-height:16px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn ghost" onclick="closeModal('transferModal')">Cancel</button>
+      <button class="btn gold" onclick="submitTransfer()">Transfer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---------- DEMO MODE: in-memory fake database ----------
    Replaces the real Supabase client. Same API surface the app uses:
@@ -864,7 +906,8 @@ function makeDemoDB(getTables){
       lte(c,v){ this._filters.push(r=>r[c]<=v); return this; },
       gt(c,v){ this._filters.push(r=>r[c]>v); return this; },
       lt(c,v){ this._filters.push(r=>r[c]<v); return this; },
-      is(c,v){ this._filters.push(r=>r[c]===v); return this; },
+      is(c,v){ this._filters.push(r=> v===null ? r[c]==null : r[c]===v); return this; }, // SQL NULL semantics: a missing (undefined) column IS NULL, matching real Postgres — so a notify()-inserted row with no dismissed_at still shows in the bell
+
       match(o){ this._filters.push(r=>Object.keys(o).every(k=>r[k]===o[k])); return this; },
       order(c,o){ this._order={c, asc:!(o&&o.ascending===false)}; return this; },
       limit(n){ this._limit=n; return this; },
@@ -883,15 +926,33 @@ function makeDemoDB(getTables){
                 const i = rows.findIndex(r=>r[key]!==undefined && r[key]===row[key]);
                 if(i>=0){ rows[i] = {...rows[i], ...row}; return; }
               }
-              if(row.id===undefined || row.id===null) row.id = 'gen-'+Math.random().toString(36).slice(2);
+              if(row.id===undefined || row.id===null){
+                // Mimic Postgres `generated always as identity`: if this table's
+                // rows already use integer ids, hand out the next integer so
+                // freshly-inserted rows match the seeded/real-Supabase shape.
+                // notifications/case_transfers/contact_logs render ids into
+                // UNQUOTED onclick handlers (dismissNotif(${n.id})) and/or compare
+                // loosely, so they need integer ids. Tables seeded empty
+                // (todos/case_notes/client_todos/support_tickets) render ids into
+                // QUOTED handlers with strict eq, so they keep the string fallback.
+                const allNumeric = rows.length>0 && rows.every(r=>typeof r.id==='number');
+                row.id = allNumeric ? Math.max(...rows.map(r=>r.id)) + 1
+                                    : 'gen-'+Math.random().toString(36).slice(2);
+              }
+              // Mimic Postgres `created_at timestamptz default now()`: the shared
+              // notify()/submitTicket()/addNote() code inserts without a created_at
+              // (real Supabase fills it), so without this a demo-created row renders
+              // "Invalid Date" and sorts to the bottom of created_at-ordered lists.
+              if(row.created_at===undefined) row.created_at = new Date().toISOString();
               rows.push(row);
             });
             const out = clone(items);
             return { data: this._single ? (out[0]||null) : out, error:null };
           }
           if(this._op==='update'){
-            rows.forEach((r,i)=>{ if(this._keep(r)) rows[i] = {...r, ...clone(this._payload)}; });
-            return { data:null, error:null };
+            const updated=[];
+            rows.forEach((r,i)=>{ if(this._keep(r)){ rows[i] = {...r, ...clone(this._payload)}; updated.push(clone(rows[i])); } });
+            return { data: this._single ? (updated[0]||null) : updated, error:null };
           }
           if(this._op==='delete'){
             for(let i=rows.length-1;i>=0;i--){ if(this._keep(rows[i])) rows.splice(i,1); }
@@ -943,6 +1004,7 @@ function isSupervisor(){ return currentProfile?.role === 'supervisor'; }
 function isCM(){ return currentProfile?.role === 'case_manager'; }
 function canSeeAllCases(){ return isAdmin() || isPM(); }
 function canEdit(){ return isAdmin() || isCM(); }
+function canTransfer(){ return isAdmin() || currentProfile?.can_transfer === true; }
 
 function roleLabel(role){
   return { admin:'Administrator', program_manager:'Program Manager', supervisor:'Supervisor', case_manager:'Case Manager' }[role] || role;
@@ -1065,7 +1127,9 @@ async function bootApp(user){
   // admin's tabs would linger for the next (lower-privilege) person who signs in. Deciding
   // show-or-hide from scratch on each login keeps the UI honest without a page refresh.
   document.getElementById('adminTabBtn').style.display = isAdmin() ? '' : 'none';
-  if(isAdmin()) refreshTicketBadge();
+
+  refreshNotifications();
+  if(!window.__notifPoll){ window.__notifPoll = setInterval(refreshNotifications, 30000); }
 
   document.getElementById('teamTabBtn').style.display = (isSupervisor() || isPM() || isAdmin()) ? '' : 'none';
 
@@ -1461,6 +1525,7 @@ async function loadAdminUsers(){
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
             <button onclick="event.stopPropagation();toggleUserActive('${u.id}',${u.active})" style="background:${u.active?'#fee2e2':'#dcfce7'};border:none;border-radius:4px;padding:2px 7px;font-size:9px;font-family:'Poppins',sans-serif;font-weight:700;color:${u.active?'#991b1b':'#166534'};cursor:pointer">${u.active?'Deactivate':'Activate'}</button>
             <button onclick="event.stopPropagation();adminSendReset('${esc(u.email)}',this)" style="background:#e0edff;border:none;border-radius:4px;padding:2px 7px;font-size:9px;font-family:'Poppins',sans-serif;font-weight:700;color:#0050b4;cursor:pointer" title="Email this person a password reset link">Reset PW</button>
+            <label title="Can transfer cases" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--gray);cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600"><input type="checkbox" ${u.can_transfer?'checked':''} onclick="event.stopPropagation()" onchange="toggleCanTransfer('${u.id}', this.checked)" style="width:auto;margin:0;cursor:pointer">Transfer</label>
             <div style="color:var(--gray-light);font-size:15px;cursor:grab;line-height:1;padding-top:2px" title="Drag to reassign">⠿</div>
           </div>
         </div>`;
@@ -1567,6 +1632,13 @@ async function toggleUserActive(id, current){
   }catch(e){ console.error('toggle active failed', e); }
 }
 
+async function toggleCanTransfer(userId, value){
+  try{
+    const { error } = await sb.from('profiles').update({ can_transfer: value }).eq('id', userId);
+    if(error) throw error;
+  }catch(e){ console.error('set can_transfer failed', e); alert('Could not update permission — try again.'); loadAdminUsers(); }
+}
+
 async function assignSupervisor(caseManagerId, supervisorId){
   if(!isAdmin()){ console.warn('assignSupervisor: admin only'); return; }
   try{
@@ -1654,23 +1726,114 @@ async function adminDrop(event, supervisorId){
   await assignSupervisor(cmId, supervisorId);
 }
 
+/* ---------- NOTIFICATION CENTER ---------- */
+let notifCache = [];
+
+// Insert one notification row. payload = {type, title, body?, link_type?, link_id?}
+async function notify(recipientId, payload){
+  if(!recipientId) return;
+  try{
+    await sb.from('notifications').insert({
+      recipient_user_id: recipientId,
+      type: payload.type,
+      title: payload.title,
+      body: payload.body || null,
+      link_type: payload.link_type || null,
+      link_id: payload.link_id != null ? String(payload.link_id) : null
+    });
+  }catch(e){ console.error('notify failed', e); }
+}
+async function notifyMany(recipientIds, payload){
+  const ids = [...new Set((recipientIds||[]).filter(Boolean))];
+  await Promise.all(ids.map(id => notify(id, payload)));
+}
+
+async function refreshNotifications(){
+  if(!currentUser) return;
+  try{
+    const { data, error } = await sb.from('notifications')
+      .select('*').is('dismissed_at', null)
+      .order('created_at', { ascending:false }).limit(50);
+    if(error) throw error;
+    notifCache = data || [];
+    renderNotifList();
+    const unread = notifCache.filter(n=>!n.read_at).length;
+    const badge = document.getElementById('notifCount');
+    if(badge){
+      if(unread>0){ badge.textContent = unread>99?'99+':unread; badge.style.display=''; }
+      else badge.style.display='none';
+    }
+  }catch(e){ /* best-effort; never disrupt the app */ }
+}
+
+function notifIcon(type){ return {ticket:'🐞', transfer:'🔄', flag:'🚩'}[type] || '🔔'; }
+
+function renderNotifList(){
+  const el = document.getElementById('notifList');
+  if(!el) return;
+  if(notifCache.length===0){
+    el.innerHTML = '<div style="padding:22px 12px;text-align:center;color:var(--gray-light);font-size:12px">No notifications</div>';
+    return;
+  }
+  el.innerHTML = notifCache.map(n=>{
+    const when = new Date(n.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    const unreadBg = n.read_at ? '#fff' : 'var(--blue-bg, #f0f7fd)';
+    const bodyHtml = n.body ? `<div style="font-size:11px;color:var(--gray);margin-top:2px;line-height:1.4">${esc(n.body)}</div>` : '';
+    return `<div style="display:flex;gap:8px;padding:8px;border-radius:8px;background:${unreadBg};margin-bottom:4px">
+      <div style="font-size:16px;line-height:1.2">${notifIcon(n.type)}</div>
+      <div class="notif-open" style="flex:1;cursor:pointer" data-ntype="${escAttr(n.link_type||'')}" data-nid="${escAttr(n.link_id==null?'':n.link_id)}">
+        <div style="font-size:12px;font-weight:600;color:var(--navy);line-height:1.4">${esc(n.title)}</div>
+        ${bodyHtml}
+        <div style="font-size:10px;color:var(--gray-light);margin-top:3px">${when}</div>
+      </div>
+      <button class="notif-dismiss" data-nid="${escAttr(n.id)}" title="Dismiss" style="background:none;border:none;color:var(--gray-light);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;align-self:flex-start">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function toggleNotifPanel(ev){
+  if(ev) ev.stopPropagation();
+  const panel = document.getElementById('notifPanel');
+  const opening = panel.style.display==='none' || !panel.style.display;
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening){
+    const unreadIds = notifCache.filter(n=>!n.read_at).map(n=>n.id);
+    if(unreadIds.length){
+      const now = new Date().toISOString();
+      notifCache.forEach(n=>{ if(!n.read_at) n.read_at = now; });
+      const badge = document.getElementById('notifCount'); if(badge) badge.style.display='none';
+      try{ await sb.from('notifications').update({read_at: now}).in('id', unreadIds); }catch(e){}
+    }
+  }
+}
+
+async function dismissNotif(id){
+  notifCache = notifCache.filter(n=>n.id!==id);
+  renderNotifList();
+  try{ await sb.from('notifications').update({dismissed_at:new Date().toISOString()}).eq('id', id); }catch(e){}
+  refreshNotifications();
+}
+
+function goToTab(name){
+  const btn = document.querySelector(`nav.tabs button[data-tab="${name}"]`);
+  if(btn) btn.click();
+}
+
+function openNotifTarget(linkType, linkId){
+  document.getElementById('notifPanel').style.display='none';
+  // Note: demo case ids are strings (e.g. 'C-1004'), unlike the live app's numeric ids —
+  // so unlike rebrandcopy.html this skips parseInt() and passes linkId straight through.
+  if(linkType==='case' && linkId){ goToTab('roster'); openClientProfile(linkId); }
+  else if(linkType==='ticket'){ if(isAdmin()) goToTab('admin'); }
+}
+
 /* ---------- SUPPORT TICKETS (admin view) ---------- */
 // Unread badge on the Admin tab — counts tickets that still need attention (open / in progress).
 async function refreshTicketBadge(){
-  const badge = document.getElementById('ticketBadge');
-  if(!badge || !isAdmin()) return;
-  try{
-    const { count, error } = await sb.from('support_tickets')
-      .select('id', { count:'exact', head:true })
-      .or('status.is.null,status.in.(open,in_progress)');
-    if(error) throw error;
-    if(count && count > 0){ badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
-    else { badge.style.display = 'none'; }
-  }catch(e){ /* badge is best-effort; don't disrupt the app */ }
+  return;
 }
 
 async function loadAdminTickets(){
-  refreshTicketBadge();
   const el = document.getElementById('adminTicketList');
   if(!el) return;
   el.innerHTML = '<div style="font-size:13px;color:var(--gray-light);font-style:italic">Loading…</div>';
@@ -1737,6 +1900,55 @@ async function addTicketNote(id){
     await sb.from('support_tickets').update({ admin_note: note }).eq('id', id);
     loadAdminTickets();
   }catch(e){ console.error('ticket note failed', e); alert('Could not save note — try again.'); }
+}
+
+async function loadTransferLog(){
+  if(!(isAdmin() || isPM())) return;
+  const el = document.getElementById('transferLogList');
+  if(!el) return;
+  try{
+    const { data: rows, error } = await sb.from('case_transfers').select('*')
+      .order('created_at', { ascending:false }).limit(200);
+    if(error) throw error;
+    const { data: profs } = await sb.from('profiles').select('id,full_name,email');
+    const nameOf = id => { const p=(profs||[]).find(x=>x.id===id); return p ? (p.full_name||p.email) : '—'; };
+    if(!rows || rows.length===0){ el.innerHTML='<div style="font-size:13px;color:var(--gray-light);font-style:italic">No transfers yet.</div>'; return; }
+    el.innerHTML = rows.map(t=>{
+      const when = new Date(t.created_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+      const noteHtml = t.note ? `<div style="font-size:11px;color:var(--gray);margin-top:2px">${esc(t.note)}</div>` : '';
+      return `<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px">
+        <div style="font-size:12px;color:var(--navy)"><b>Case #${t.case_id}</b>: ${esc(nameOf(t.from_user_id))} → ${esc(nameOf(t.to_user_id))}</div>
+        <div style="font-size:11px;color:var(--gray-light)">by ${esc(nameOf(t.transferred_by))} · ${when}</div>
+        ${noteHtml}
+      </div>`;
+    }).join('');
+  }catch(e){ console.error('load transfers failed', e); el.innerHTML='<div style="font-size:13px;color:var(--red)">Failed to load transfers.</div>'; }
+}
+
+async function downloadTransferReport(btn){
+  if(!(isAdmin() || isPM())) return;
+  if(btn) btn.disabled = true;
+  try{
+    const { data: rows, error } = await sb.from('case_transfers').select('*').order('created_at',{ascending:false});
+    if(error) throw error;
+    const { data: profs } = await sb.from('profiles').select('id,full_name,email');
+    const nameOf = id => { const p=(profs||[]).find(x=>x.id===id); return p ? (p.full_name||p.email) : '—'; };
+    const out = (rows||[]).map(t=>({
+      'Case ID': t.case_id,
+      'From': nameOf(t.from_user_id),
+      'To': nameOf(t.to_user_id),
+      'Transferred By': nameOf(t.transferred_by),
+      'Date': new Date(t.created_at).toLocaleString('en-US'),
+      'Note': t.note || ''
+    }));
+    if(out.length===0){ alert('No transfers to export yet.'); return; }
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(out, { header:['Case ID','From','To','Transferred By','Date','Note'] });
+    XLSX.utils.book_append_sheet(wb, ws, 'Case Transfers');
+    const blob = new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    triggerDownload(blob, 'case-transfers_' + todayISO() + '.xlsx');
+  }catch(e){ console.error('transfer report failed', e); alert('Export failed: ' + (e.message||e)); }
+  finally{ if(btn) btn.disabled = false; }
 }
 
 /* ═══════════════════════════════════
@@ -2459,6 +2671,17 @@ async function flagCaseForReview(caseId, currentlyFlagged){
       await sb.from('cases').update({
         flagged_for_review:true, flag_note:note, flagged_by:currentUser.id, flagged_at:new Date().toISOString()
       }).eq('id', caseId);
+      try{
+        const { data: cs } = await sb.from('cases').select('user_id').eq('id', caseId).single();
+        if(cs?.user_id){
+          await notify(cs.user_id, {
+            type:'flag',
+            title:`Case #${caseId} flagged for follow-up`,
+            body:`${currentProfile?.full_name || 'Your supervisor'} needs more info${note?`: ${note}`:''}`,
+            link_type:'case', link_id:caseId
+          });
+        }
+      }catch(e){ console.error('flag notify failed', e); }
     }
     // update in-memory copies so views refresh without a full reload
     const newFlag = !currentlyFlagged;
@@ -2468,6 +2691,61 @@ async function flagCaseForReview(caseId, currentlyFlagged){
     const c2 = cases.find(c=>c.id===caseId);
     if(c2){ c2.flaggedForReview = newFlag; c2.flagNote = newNote; }
   }catch(e){ console.error('flag toggle failed', e); alert('Could not update flag — try again.'); }
+}
+
+/* ---------- CASE TRANSFER ---------- */
+async function openTransferModal(caseId){
+  if(!canTransfer()) return;
+  document.getElementById('transferCaseId').value = caseId;
+  document.getElementById('transferNote').value = '';
+  document.getElementById('transferMsg').textContent = '';
+  // Populate active case managers, excluding the current owner.
+  const { data: cur } = await sb.from('cases').select('user_id').eq('id', caseId).single();
+  const { data: cms } = await sb.from('profiles').select('id,full_name,email')
+    .eq('role','case_manager').eq('active', true).order('full_name');
+  const sel = document.getElementById('transferNewOwner');
+  sel.innerHTML = '<option value="">Select a case manager…</option>' +
+    (cms||[]).filter(p=>p.id!==cur?.user_id)
+      .map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('');
+  show('transferModal'); // adds .show
+}
+
+async function submitTransfer(){
+  const caseId = document.getElementById('transferCaseId').value;
+  const newOwner = document.getElementById('transferNewOwner').value;
+  const note = document.getElementById('transferNote').value.trim() || null;
+  const msg = document.getElementById('transferMsg');
+  if(!newOwner){ msg.style.color='var(--red)'; msg.textContent='Pick a case manager.'; return; }
+  try{
+    const { data: cur } = await sb.from('cases').select('user_id').eq('id', caseId).single();
+    const fromId = cur?.user_id || null;
+    // 1. change owner
+    const { data: updRows, error: uErr } = await sb.from('cases').update({ user_id: newOwner }).eq('id', caseId).select('id');
+    if(uErr) throw uErr;
+    if(!updRows || updRows.length===0) throw new Error('The case could not be updated — it may have been removed, or you may not have permission.');
+    // 2. write the audit log row
+    const { error: tErr } = await sb.from('case_transfers').insert({
+      case_id: caseId, from_user_id: fromId, to_user_id: newOwner,
+      transferred_by: currentUser.id, note
+    });
+    if(tErr) throw tErr;
+    // 3. fan out notifications: new owner + their supervisor
+    const { data: newProf } = await sb.from('profiles').select('id,full_name,supervisor_id').eq('id', newOwner).single();
+    const byName = currentProfile?.full_name || 'A supervisor';
+    await notify(newOwner, { type:'transfer', title:`Case #${caseId} assigned to you`,
+      body:`Transferred by ${byName}${note?` — ${note}`:''}`, link_type:'case', link_id:caseId });
+    if(newProf?.supervisor_id){
+      await notify(newProf.supervisor_id, { type:'transfer', title:`Case #${caseId} assigned to ${newProf.full_name||'a case manager'}`,
+        body:`On your team — transferred by ${byName}`, link_type:'case', link_id:caseId });
+    }
+    closeModal('transferModal');
+    alert('Case transferred.');
+    if(activeRosterId === caseId){ openClientProfile(caseId, true); }
+    else if(typeof openTeamClientProfile==='function'){ openTeamClientProfile(caseId); }
+  }catch(e){
+    console.error('transfer failed', e);
+    msg.style.color='var(--red)'; msg.textContent='Transfer failed: ' + (e.message||e);
+  }
 }
 
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
@@ -2694,6 +2972,7 @@ async function openTeamClientProfile(id){
       <div style="padding:16px 20px;border-bottom:1px solid var(--line)">
         ${c&&c.flaggedForReview?flagBadge(c):'<div style="font-size:12px;color:var(--gray-light)">Not currently flagged.</div>'}
         <button class="btn sm ${c&&c.flaggedForReview?'ghost':'amber'}" style="margin-top:8px" onclick="handleFlagClickInProfile('${id}',${!!(c&&c.flaggedForReview)})">${c&&c.flaggedForReview?'Clear Flag':'🚩 Flag for Review'}</button>
+        ${canTransfer() ? `<button class="btn sm" style="margin-top:8px" onclick="openTransferModal('${id}')">🔄 Transfer case</button>` : ''}
       </div>
 
       <!-- CASE STATUS -->
@@ -3732,6 +4011,7 @@ function renderDash(){
   }).join('');
 }
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+function escAttr(s){return String(s==null?'':s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]))}
 // Display-only labels — the underlying status values (outreach/intake/open/etc.)
 // never change in the database, RLS, or sorting logic. This only renames what's shown.
 function statusLabel(status){
@@ -4180,6 +4460,7 @@ async function openClientProfile(id, silent=false){
   }
   // Append the July 2026 Flood section under Case Status (only when a case exists).
   if(c) caseHtml += floodSectionHtml(c);
+  if(c && canTransfer()) caseHtml += `<button class="btn sm" style="margin-top:8px" onclick="openTransferModal('${id}')">🔄 Transfer case</button>`;
 
   // contact logs section
   const logHtml=clientLogs.length===0
@@ -4598,9 +4879,20 @@ async function submitTicket(){
       description
     });
     if(error) throw error;
+    // Fan out a notification to every admin / PM / supervisor.
+    try{
+      const { data: recips } = await sb.from('profiles')
+        .select('id').in('role', ['admin','program_manager','supervisor']).eq('active', true);
+      const cat = document.getElementById('ticketCategory')?.value || 'issue';
+      await notifyMany((recips||[]).map(r=>r.id), {
+        type:'ticket',
+        title:'New support ticket',
+        body:(currentProfile?.full_name || 'A user') + ' reported a ' + cat,
+        link_type:'ticket'
+      });
+    }catch(e){ console.error('ticket notify failed', e); }
     msgEl.style.color='var(--green)';
     msgEl.textContent='Ticket submitted ✓ — thank you!';
-    refreshTicketBadge();
     setTimeout(()=>{ closeModal('ticketModal'); }, 1200);
   }catch(e){
     console.error('ticket submit failed', e);
@@ -4614,9 +4906,19 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
   b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('show');
   if(b.dataset.tab==='notes')renderNotesTab();
   if(b.dataset.tab==='weekly')renderWeekly();
-  if(b.dataset.tab==='admin'){loadAdminUsers();loadAdminTickets();}
+  if(b.dataset.tab==='admin'){loadAdminUsers();loadAdminTickets();loadTransferLog();}
   if(b.dataset.tab==='team')loadTeamView();
 });
+document.addEventListener('click', e=>{
+  const wrap = document.getElementById('notifWrap');
+  if(wrap && !wrap.contains(e.target)) document.getElementById('notifPanel').style.display='none';
+});
+(function(){ const nl=document.getElementById('notifList'); if(nl && !nl.__wired){ nl.__wired=true; nl.addEventListener('click', e=>{
+  const openEl=e.target.closest('.notif-open');
+  if(openEl){ openNotifTarget(openEl.dataset.ntype, openEl.dataset.nid); return; }
+  const disEl=e.target.closest('.notif-dismiss');
+  if(disEl){ const n=notifCache.find(x=>String(x.id)===disEl.dataset.nid); if(n) dismissNotif(n.id); }
+}); } })();
 document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('show')});
 
 function renderAll(){renderDash();renderRoster();renderWeekly();}
@@ -5265,7 +5567,7 @@ function buildDemoData(){
   const profiles = [
     { id:'pm-0001', email:'preview@example.org', full_name:'Preview Manager',
       role:'program_manager', office:'Kerrville', active:true,
-      must_change_password:false, supervisor_id:null, last_login:daysAgo(0) },
+      must_change_password:false, supervisor_id:null, last_login:daysAgo(0), can_transfer:true },
     { id:'cm-01', email:'alex@example.org',   full_name:'Alex Rivera',  role:'case_manager', office:'Kerrville',   active:true, supervisor_id:null },
     { id:'cm-02', email:'jordan@example.org', full_name:'Jordan Lee',   role:'case_manager', office:'Kerrville',   active:true, supervisor_id:null },
     { id:'cm-03', email:'sam@example.org',    full_name:'Sam Patel',    role:'case_manager', office:'San Angelo',  active:true, supervisor_id:null },
@@ -5344,10 +5646,30 @@ function buildDemoData(){
     { week_ending: daysAgo(7),  contacts_logged: 38, notes:'' },
   ];
 
+  // ---- Notification Center + Case Transfers seed data ----
+  // Reuses real ids from the seed above: case C-1004 (owned by cm-01/Alex Rivera),
+  // recipient is DEMO_USER (pm-0001), so the bell + admin panel show something on load.
+  const notifications = [
+    { id:1, recipient_user_id: DEMO_USER.id, type:'transfer', title:'Case #C-1004 assigned to you',
+      body:'Transferred by Alex Rivera — intake complete', link_type:'case', link_id:'C-1004',
+      created_at: new Date(Date.now()-3600e3).toISOString(), read_at:null, dismissed_at:null },
+    { id:2, recipient_user_id: DEMO_USER.id, type:'ticket', title:'New support ticket',
+      body:'Jordan Lee reported a bug', link_type:'ticket', link_id:null,
+      created_at: new Date(Date.now()-7200e3).toISOString(), read_at:null, dismissed_at:null },
+    { id:3, recipient_user_id: DEMO_USER.id, type:'flag', title:'Case #C-1004 flagged for follow-up',
+      body:'Alex Rivera needs more info: verify income docs', link_type:'case', link_id:'C-1004',
+      created_at: new Date(Date.now()-86400e3).toISOString(), read_at:new Date().toISOString(), dismissed_at:null }
+  ];
+  const case_transfers = [
+    { id:1, case_id:'C-1004', from_user_id:'cm-01', to_user_id: DEMO_USER.id, transferred_by:'cm-01',
+      note:'Intake complete — handing to ongoing services', created_at: new Date(Date.now()-3600e3).toISOString() }
+  ];
+
   return {
     profiles, cases, roster, contact_logs,
     case_notes: [], client_todos: [], audit_entries: [],
-    step_templates: [], support_tickets: [], todos: [], weekly_report
+    step_templates: [], support_tickets: [], todos: [], weekly_report,
+    notifications, case_transfers
   };
 }
 
