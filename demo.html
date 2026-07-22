@@ -216,6 +216,14 @@
   .roster-line:last-child{border:none}
   .roster-line:hover{background:var(--blue-bg)}
   .roster-line.active-row{background:var(--blue-pale);border-left:3px solid var(--blue)}
+  .transferred-sec{border-top:1px solid var(--line);margin-top:4px}
+  .transferred-head{padding:10px 16px;font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+  .transferred-head .chev{transition:transform .15s}
+  .transferred-sec.collapsed .chev{transform:rotate(-90deg)}
+  .transferred-sec.collapsed .transferred-body{display:none}
+  .roster-line.transferred-row{background:var(--blue-bg)}
+  .roster-line.transferred-row:hover{background:var(--blue-pale)}
+  .transferred-badge{font-style:italic;color:var(--gray-light)}
   .profile-stat{background:var(--blue-bg);border-radius:7px;padding:10px 14px;text-align:center}
   .profile-stat-val{font-family:'Poppins',sans-serif;font-weight:800;font-size:18px;color:var(--navy)}
   .profile-stat-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-top:3px}
@@ -2398,15 +2406,20 @@ async function renderTeamOverview(scope){
         return dueDateFor(c,c.step) < todayISO();
       });
       const idList = allCases.map(c=>c.id);
-      let contactsThisWeek = 0, madeContact = 0, totalAttempts = 0;
+      // Office-wide activity totals stay CASE-based (they measure the office's
+      // cases, not a person), so fetch office logs by case_id separately.
       if(idList.length>0){
         const { data: allLogsData } = await sb.from('contact_logs').select('*').in('case_id', idList);
-        const userLogs = allLogsData || [];
-        officeLogs = officeLogs.concat(userLogs);
-        contactsThisWeek = userLogs.filter(l=>l.date>=weekAgo).length;
-        totalAttempts = userLogs.length;
-        madeContact = userLogs.filter(l=>l.result==='Made contact').length;
+        officeLogs = officeLogs.concat(allLogsData || []);
       }
+      // Contact CREDIT follows the author, not the case owner — a DCM keeps credit for
+      // contacts they logged even after the case is transferred away.
+      let contactsThisWeek = 0, madeContact = 0, totalAttempts = 0;
+      const { data: authoredLogs } = await sb.from('contact_logs').select('*').eq('logged_by', u.id);
+      const myLogs = authoredLogs || [];
+      contactsThisWeek = myLogs.filter(l=>l.date>=weekAgo).length;
+      totalAttempts = myLogs.length;
+      madeContact = myLogs.filter(l=>l.result==='Made contact').length;
       stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
     }
 
@@ -3429,6 +3442,8 @@ function tierBadge(tier){
 }
 
 let cases = [];
+let transferredCases = []; // cases this user previously owned, now transferred away (read-only Roster history)
+let transferredOwnerNames = {}; // to_user_id -> display name, for the "Transferred to X" badge
 let reportCases = []; // org/office-scoped cases for Weekly Report compliance stats only
 let logs = [];
 let weekly = [];
@@ -3479,6 +3494,34 @@ async function load(){
       flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
       tier:r.tier||null, pathCStep:r.path_c_step||0
     }));
+
+    // Cases this user previously owned (transferred away) — read-only history.
+    try{
+      const { data: myTransfers } = await sb.from('case_transfers')
+        .select('case_id, to_user_id, created_at').eq('from_user_id', currentUser.id)
+        .order('created_at', { ascending:false });
+      const ids = [...new Set((myTransfers||[]).map(t=>t.case_id))];
+      let tCases = [];
+      if(ids.length){
+        const { data: tc } = await sb.from('cases').select('*').in('id', ids);
+        // only those I no longer own
+        tCases = (tc||[]).filter(c=>c.user_id !== currentUser.id);
+      }
+      // attach the latest transfer info (to whom, when) for the badge
+      const latestByCase = {};
+      (myTransfers||[]).forEach(t=>{ if(!latestByCase[t.case_id]) latestByCase[t.case_id]=t; });
+      transferredCases = tCases.map(r=>({
+        id:r.id, status:r.status, step:r.step, assigned:r.assigned, closed:r.closed,
+        toUserId: latestByCase[r.id]?.to_user_id || null,
+        transferredAt: latestByCase[r.id]?.created_at || null
+      }));
+      // resolve new-owner display names, same lookup pattern used by the Team/admin transfer views
+      if(transferredCases.length){
+        const { data: profs } = await sb.from('profiles').select('id,full_name,email');
+        transferredOwnerNames = {};
+        (profs||[]).forEach(p=>{ transferredOwnerNames[p.id] = p.full_name || p.email; });
+      }
+    }catch(e){ console.error('load transferred cases failed', e); transferredCases = []; transferredOwnerNames = {}; }
 
     // Weekly Report is a compliance tool, not a personal view — admins/PMs see org-wide,
     // supervisors see their office, case managers see their own (mirrors the old Dashboard scope).
@@ -3659,7 +3702,8 @@ async function saveLogEntry(entry){
     const {data,error}=await sb.from('contact_logs').insert({
       case_id:entry.id, method:entry.method, date:entry.date,
       time:entry.time||null, result:entry.result, notes:entry.notes||null,
-      stage_at_log:entry.stage||null
+      stage_at_log:entry.stage||null,
+      logged_by: currentUser.id
     }).select().single();
     if(error) throw error;
     entry._dbId=data.id;
@@ -4333,8 +4377,10 @@ function renderRoster(){
       if(pa!==pb) return pa-pb;
       return a-b;
     });
-  if(ids.length===0){el.innerHTML='<div class="empty" style="padding:20px;color:var(--gray-light);font-size:13px">No survivors yet.</div>';return;}
-  el.innerHTML=ids.map(id=>{
+  if(ids.length===0 && !transferredCases.length){el.innerHTML='<div class="empty" style="padding:20px;color:var(--gray-light);font-size:13px">No survivors yet.</div>';return;}
+  el.innerHTML=(ids.length===0 && transferredCases.length)
+    ? '<div class="empty" style="padding:14px 16px;color:var(--gray-light);font-size:13px">No active cases.</div>'
+    : ids.map(id=>{
     const c=cases.find(x=>x.id===id);
     const st=c?c.status:'—';
     const cnt=logs.filter(l=>l.id===id).length;
@@ -4348,7 +4394,28 @@ function renderRoster(){
       <div class="mini">${roster[id]?esc(roster[id]):'<i>no name stored</i>'} · ${cnt} log${cnt!==1?'s':''}</div>
     </div>`;
   }).join('');
+  if(transferredCases.length){
+    el.innerHTML += `<div class="transferred-sec">
+      <div class="transferred-head" onclick="this.parentNode.classList.toggle('collapsed')">
+        Transferred (${transferredCases.length}) <span class="chev">▾</span>
+      </div>
+      <div class="transferred-body">${transferredCases.map(transferredRosterRow).join('')}</div>
+    </div>`;
+  }
   if(activeRosterId) openClientProfile(activeRosterId,true);
+}
+
+// Read-only row for a case this user previously owned but has since transferred away.
+// Greyed-out, badged with the new owner + transfer date; opening it is handled by openClientProfile.
+function transferredRosterRow(c){
+  const name = c.toUserId ? (transferredOwnerNames[c.toUserId] || '—') : '—';
+  return `<div class="roster-line transferred-row" onclick="openClientProfile('${c.id}')" style="cursor:pointer;opacity:.6">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-family:'Poppins',sans-serif;font-weight:700;color:var(--navy)">#${c.id}</span>
+      <span style="font-size:11px;font-weight:600;color:var(--gray-light);text-transform:uppercase;letter-spacing:.3px">${statusLabel(c.status)}</span>
+    </div>
+    <div class="mini">${roster[c.id]?esc(roster[c.id]):'<i>no name stored</i>'} · <span class="transferred-badge">Transferred to ${esc(name)} · ${fmt((c.transferredAt||'').slice(0,10))}</span></div>
+  </div>`;
 }
 
 function setName(id,v){
@@ -4403,19 +4470,20 @@ const RECOVERY_NEEDS = [
 ];
 
 // Renders the flood checkbox + (when ticked) the Recovery Needs checklist for one case.
-function floodSectionHtml(c){
+function floodSectionHtml(c, readOnly){
   const on = !!c.flood_2026;
   const needs = Array.isArray(c.recovery_needs) ? c.recovery_needs : [];
+  const dis = readOnly ? 'disabled' : '';
   const needsRows = RECOVERY_NEEDS.map(n=>{
     const checked = needs.includes(n) ? 'checked' : '';
     return `<label style="display:flex;align-items:center;gap:9px;margin:0;padding:5px 8px;font-size:13px;font-weight:500;color:var(--ink);text-transform:none;letter-spacing:0;line-height:1.3;cursor:pointer;border-radius:5px">
-      <input type="checkbox" data-need="${esc(n)}" ${checked} onchange="onRecoveryNeedToggle(${c.id})" style="width:16px;height:16px;flex-shrink:0;margin:0;cursor:pointer">
+      <input type="checkbox" data-need="${esc(n)}" ${checked} ${dis} onchange="onRecoveryNeedToggle(${c.id})" style="width:16px;height:16px;flex-shrink:0;margin:0;cursor:pointer">
       <span style="text-transform:none;letter-spacing:0">${esc(n)}</span></label>`;
   }).join('');
   return `
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
     <label style="display:flex;align-items:center;gap:9px;margin:0;font-size:14px;font-weight:700;color:var(--navy);text-transform:none;letter-spacing:0;cursor:pointer">
-      <input type="checkbox" id="floodFlag-${c.id}" ${on?'checked':''} onchange="onFloodFlagToggle(${c.id})" style="width:17px;height:17px;flex-shrink:0;margin:0;cursor:pointer">
+      <input type="checkbox" id="floodFlag-${c.id}" ${on?'checked':''} ${dis} onchange="onFloodFlagToggle(${c.id})" style="width:17px;height:17px;flex-shrink:0;margin:0;cursor:pointer">
       Affected by July 2026 Flood
     </label>
     <div id="recoveryNeeds-${c.id}" style="margin-top:14px;${on?'':'display:none'}">
@@ -4454,6 +4522,11 @@ async function openClientProfile(id, silent=false){
   const el=document.getElementById('clientProfile');
   el.style.display='block';
 
+  const roCase=transferredCases.find(t=>t.id===id);
+  const readOnly=!!roCase || !cases.some(c=>c.id===id);
+  const roToName=roCase && roCase.toUserId ? (transferredOwnerNames[roCase.toUserId] || null) : null;
+  const roBanner=readOnly?`<div style="background:var(--amber-soft);color:var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-weight:700;font-size:13px">Transferred${roToName?` to ${esc(roToName)}`:''}${roCase&&roCase.transferredAt?` on ${fmt((roCase.transferredAt||'').slice(0,10))}`:''} — read only</div>`:'';
+
   const c=cases.find(x=>x.id===id);
   const clientLogs=[...logs.filter(l=>l.id===id)].sort((a,b)=>b.date.localeCompare(a.date));
   const auditList=auditLoadList(id);
@@ -4478,8 +4551,8 @@ async function openClientProfile(id, silent=false){
     caseHtml='<div style="font-size:13px;color:var(--gray-light);padding:8px 0">No active case found.</div>';
   }
   // Append the July 2026 Flood section under Case Status (only when a case exists).
-  if(c) caseHtml += floodSectionHtml(c);
-  if(c && canTransfer()) caseHtml += `<button class="btn sm" style="margin-top:8px" onclick="openTransferModal('${id}')">🔄 Transfer case</button>`;
+  if(c) caseHtml += floodSectionHtml(c, readOnly);
+  if(c && canTransfer() && !readOnly) caseHtml += `<button class="btn sm" style="margin-top:8px" onclick="openTransferModal('${id}')">🔄 Transfer case</button>`;
 
   // contact logs section
   const logHtml=clientLogs.length===0
@@ -4492,10 +4565,10 @@ async function openClientProfile(id, silent=false){
           <span style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;min-width:72px">${fmt(l.date)}${l.time?` <span style="font-weight:500;color:var(--gray-light)">${l.time}</span>`:''}</span>
           <span style="font-size:11px;background:var(--blue-bg);border-radius:4px;padding:2px 7px;color:var(--gray);text-transform:capitalize">${l.method||'—'}</span>
           <span style="font-size:11px;font-weight:700;color:${resultColor}">${resultIcon} ${l.result||'—'}</span>
-          <span style="margin-left:auto;display:flex;gap:6px">
+          ${readOnly?'':`<span style="margin-left:auto;display:flex;gap:6px">
             <button class="btn sm ghost" style="padding:2px 8px;font-size:11px" onclick="openEditLog('${l._dbId}')">✏️ Edit</button>
             <button class="btn sm ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteLog('${l._dbId}')">🗑 Delete</button>
-          </span>
+          </span>`}
         </div>
         ${l.notes?`<div style="font-size:12px;color:var(--ink);background:var(--blue-bg);border-left:3px solid var(--line);border-radius:0 5px 5px 0;padding:6px 10px;margin-top:6px;line-height:1.5">${esc(l.notes)}</div>`:''}
       </div>`;
@@ -4521,6 +4594,8 @@ async function openClientProfile(id, silent=false){
   el.innerHTML=`
     <div style="background:var(--white);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-card);overflow:hidden">
 
+      ${roBanner ? `<div style="padding:14px 20px 0">${roBanner}</div>` : ''}
+
       <!-- HEADER -->
       <div style="background:var(--navy);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
         <div>
@@ -4528,8 +4603,8 @@ async function openClientProfile(id, silent=false){
           ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName('${id}',this.value);renderRoster()">
-          ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm('${id}', rosterAfterDelete)">🗑 Delete Case</button>`:''}
+          ${readOnly?'':`<input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName('${id}',this.value);renderRoster()">`}
+          ${(isAdmin() && !readOnly)?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm('${id}', rosterAfterDelete)">🗑 Delete Case</button>`:''}
           <button class="btn sm ghost" style="color:var(--white);border-color:rgba(255,255,255,.3)" onclick="activeRosterId=null;document.getElementById('clientProfile').style.display='none';renderRoster()">✕ Close</button>
         </div>
       </div>
@@ -4557,14 +4632,14 @@ async function openClientProfile(id, silent=false){
       <div style="padding:16px 20px;border-top:1px solid var(--line)">
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Case Notes</div>
         <div id="rosterNotes_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
-        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes('${id}')">Add / View All Notes →</button>
+        ${readOnly?'':`<button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('notesCaseId').value='${id}';loadAndRenderCaseNotes('${id}')">Add / View All Notes →</button>`}
       </div>
 
       <!-- CLIENT TO-DOS -->
       <div style="padding:16px 20px;border-top:1px solid var(--line)">
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">Open Tasks</div>
         <div id="rosterClientTodos_${id}"><div style="font-size:12px;color:var(--gray-light)">Loading…</div></div>
-        <button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('clientTodoId').value='${id}';loadAndRenderClientTodos('${id}')">Add / View All Tasks →</button>
+        ${readOnly?'':`<button class="btn sm ghost" style="margin-top:10px" onclick="document.querySelector('[data-tab=notes]').click();document.getElementById('clientTodoId').value='${id}';loadAndRenderClientTodos('${id}')">Add / View All Tasks →</button>`}
       </div>
 
     </div>`;
@@ -5648,11 +5723,19 @@ function buildDemoData(){
           id: logId++, case_id:id, method:'Phone', date: daysAgo(dayBack),
           time: (9+k)+':00 AM',
           result: RESULTS[(idx+k) % RESULTS.length],
-          notes:'', stage_at_log: step
+          notes:'', stage_at_log: step, logged_by: owner
         });
       }
     }
   });
+
+  // Demo seed: a case DEMO_USER (pm-0001) previously owned and has since transferred
+  // away to Jordan Lee (cm-02) — shows up in the Roster's read-only "Transferred" section.
+  // Its contact logs above were authored while pm-0001 still owned it (logged_by stays
+  // pm-0001), so Team stats keep crediting pm-0001 for that pre-transfer history.
+  const transferredAwayCaseId = 'C-2002';
+  const transferredAwayCase = cases.find(c=>c.id===transferredAwayCaseId);
+  if(transferredAwayCase) transferredAwayCase.user_id = 'cm-02';
 
   // Demo seed: flag a couple of cases as July 2026 flood-affected.
   if(cases[0]){ cases[0].flood_2026 = true; cases[0].recovery_needs = ["Clothing","Transportation","Mold Remediation"]; }
@@ -5681,7 +5764,9 @@ function buildDemoData(){
   ];
   const case_transfers = [
     { id:1, case_id:'C-1004', from_user_id:'cm-01', to_user_id: DEMO_USER.id, transferred_by:'cm-01',
-      note:'Intake complete — handing to ongoing services', created_at: new Date(Date.now()-3600e3).toISOString() }
+      note:'Intake complete — handing to ongoing services', created_at: new Date(Date.now()-3600e3).toISOString() },
+    { id:2, case_id: transferredAwayCaseId, from_user_id: DEMO_USER.id, to_user_id:'cm-02', transferred_by: DEMO_USER.id,
+      note:'Reassigning to Jordan Lee — workload balancing', created_at: new Date(Date.now()-172800e3).toISOString() }
   ];
 
   return {
