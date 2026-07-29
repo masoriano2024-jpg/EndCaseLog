@@ -2070,7 +2070,34 @@ function dateRangeControlsHtml(){
       <button class="btn sm ghost" onclick="setTeamPreset(21)">Last 21</button>
       <button class="btn sm ghost" onclick="setTeamPreset(30)">Last 30</button>
       <button class="btn sm ghost" onclick="setTeamPreset(90)">Last 90</button>
+      <span style="width:1px;align-self:stretch;background:var(--line)"></span>
+      <span style="font-size:11px;font-weight:700;color:var(--gray);font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.5px">Case #</span>
+      <input type="number" id="teamCaseSearchInput" placeholder="e.g. 42" style="padding:6px 8px;border:1.5px solid var(--line);border-radius:5px;font-size:12px;font-family:'Open Sans',sans-serif;width:90px" onkeydown="if(event.key==='Enter')searchTeamCaseNumber()">
+      <button class="btn sm gold" onclick="searchTeamCaseNumber()">🔍 Find Case</button>
     </div>`;
+}
+
+// Jumps straight to a case's read-only profile from anywhere in the Team tab, by case
+// number. Looks the case up directly via Supabase, so RLS enforces the same visibility
+// a supervisor/PM/admin already has — no separate permission check needed here.
+async function searchTeamCaseNumber(){
+  const raw = (document.getElementById('teamCaseSearchInput').value || '').trim();
+  const num = parseInt(raw, 10);
+  if(!raw || isNaN(num)){ alert('Enter a valid case number.'); return; }
+
+  const { data: c } = await sb.from('cases').select('*').eq('id', num).maybeSingle();
+  if(!c){ alert(`Case #${num} not found, or you don't have access to it.`); return; }
+
+  const { data: prof } = c.user_id
+    ? await sb.from('profiles').select('id,full_name,email,office').eq('id', c.user_id).maybeSingle()
+    : { data: null };
+  const userName = prof ? (prof.full_name || prof.email) : 'Unassigned';
+  const office = c.office || (prof && prof.office) || '';
+  const mode = isSupervisor() ? 'supervisor' : 'office';
+
+  await drillIntoUser(c.user_id, userName, office, mode);
+  toggleUserCaseload(c.user_id, userName, 'roster');
+  openTeamClientProfile(num);
 }
 function applyTeamRange(){
   const s=document.getElementById('teamRangeStartInput').value;
