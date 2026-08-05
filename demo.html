@@ -1871,11 +1871,15 @@ function jumpToCaseNumber(inputId){
   openClientProfile(num);
 }
 
-function openNotifTarget(linkType, linkId){
+async function openNotifTarget(linkType, linkId){
   document.getElementById('notifPanel').style.display='none';
   // Note: demo case ids are strings (e.g. 'C-1004'), unlike the live app's numeric ids —
   // so unlike rebrandcopy.html this skips parseInt() and passes linkId straight through.
-  if(linkType==='case' && linkId){ goToTab('roster'); openClientProfile(linkId); }
+  if(linkType==='case' && linkId){
+    goToTab('roster');
+    try{ await loadCases(); }catch(e){ console.error('case refresh before open failed', e); }
+    openClientProfile(linkId);
+  }
   else if(linkType==='ticket'){ if(isAdmin()) goToTab('admin'); }
 }
 
@@ -3524,6 +3528,53 @@ function syncStart(){ const el=document.getElementById('syncStatus'); if(el){ el
 function syncDone(){  const el=document.getElementById('syncStatus'); if(el){ el.textContent='✓ Synced';   el.style.color='#6ee7b7'; setTimeout(()=>{ if(el.textContent==='✓ Synced') el.textContent=''; },3000); } }
 function syncErr(msg){ const el=document.getElementById('syncStatus'); if(el){ el.textContent='⚠ '+msg; el.style.color='#fca5a5'; } console.error('Sync error:',msg); }
 
+// Fetches this user's own caseload + their transferred-away read-only history.
+// Called at login (via load()) and anywhere else the caseload must be current —
+// e.g. before opening a case from a notification, or on Roster tab click —
+// since cases is otherwise only ever loaded once, at login.
+async function loadCases(){
+  const {data:cData,error:cErr}=await sb.from('cases').select('*').eq('user_id', currentUser.id);
+  if(cErr) throw cErr;
+  cases=(cData||[]).map(r=>({
+    id:r.id, assigned:r.assigned, status:r.status, step:r.step,
+    started:r.started, closed:r.closed, intakeStart:r.intake_start,
+    openedAt:r.opened_at, customSteps:r.custom_steps||null,
+    flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
+    flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
+    tier:r.tier||null, pathCStep:r.path_c_step||0
+  }));
+
+  // Cases this user previously owned (transferred away) — read-only history.
+  try{
+    const { data: myTransfers } = await sb.from('case_transfers')
+      .select('case_id, to_user_id, created_at').eq('from_user_id', currentUser.id)
+      .order('created_at', { ascending:false });
+    const ids = [...new Set((myTransfers||[]).map(t=>t.case_id))];
+    let tCases = [];
+    if(ids.length){
+      const { data: tc } = await sb.from('cases').select('*').in('id', ids);
+      // only those I no longer own
+      tCases = (tc||[]).filter(c=>c.user_id !== currentUser.id);
+    }
+    // attach the latest transfer info (to whom, when) for the badge
+    const latestByCase = {};
+    (myTransfers||[]).forEach(t=>{ if(!latestByCase[t.case_id]) latestByCase[t.case_id]=t; });
+    transferredCases = tCases.map(r=>({
+      id:r.id, status:r.status, step:r.step, assigned:r.assigned, closed:r.closed,
+      toUserId: latestByCase[r.id]?.to_user_id || null,
+      transferredAt: latestByCase[r.id]?.created_at || null
+    }));
+    // resolve new-owner display names, same lookup pattern used by the Team/admin transfer views
+    if(transferredCases.length){
+      const { data: profs } = await sb.from('profiles').select('id,full_name,email');
+      transferredOwnerNames = {};
+      (profs||[]).forEach(p=>{ transferredOwnerNames[p.id] = p.full_name || p.email; });
+    }
+  }catch(e){ console.error('load transferred cases failed', e); transferredCases = []; transferredOwnerNames = {}; }
+
+  cacheWrite();
+}
+
 // ---- LOAD from Supabase (on startup) ----
 async function load(){
   // always read cache first so UI is instant
@@ -3531,46 +3582,7 @@ async function load(){
   renderAll();
   try{
     syncStart();
-    // Dashboard tab is always "my own caseload" — scoped by user_id for every role.
-    // Office-wide / org-wide visibility lives in the Team tab instead.
-    const {data:cData,error:cErr}=await sb.from('cases').select('*').eq('user_id', currentUser.id);
-    if(cErr) throw cErr;
-    cases=(cData||[]).map(r=>({
-      id:r.id, assigned:r.assigned, status:r.status, step:r.step,
-      started:r.started, closed:r.closed, intakeStart:r.intake_start,
-      openedAt:r.opened_at, customSteps:r.custom_steps||null,
-      flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
-      flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
-      tier:r.tier||null, pathCStep:r.path_c_step||0
-    }));
-
-    // Cases this user previously owned (transferred away) — read-only history.
-    try{
-      const { data: myTransfers } = await sb.from('case_transfers')
-        .select('case_id, to_user_id, created_at').eq('from_user_id', currentUser.id)
-        .order('created_at', { ascending:false });
-      const ids = [...new Set((myTransfers||[]).map(t=>t.case_id))];
-      let tCases = [];
-      if(ids.length){
-        const { data: tc } = await sb.from('cases').select('*').in('id', ids);
-        // only those I no longer own
-        tCases = (tc||[]).filter(c=>c.user_id !== currentUser.id);
-      }
-      // attach the latest transfer info (to whom, when) for the badge
-      const latestByCase = {};
-      (myTransfers||[]).forEach(t=>{ if(!latestByCase[t.case_id]) latestByCase[t.case_id]=t; });
-      transferredCases = tCases.map(r=>({
-        id:r.id, status:r.status, step:r.step, assigned:r.assigned, closed:r.closed,
-        toUserId: latestByCase[r.id]?.to_user_id || null,
-        transferredAt: latestByCase[r.id]?.created_at || null
-      }));
-      // resolve new-owner display names, same lookup pattern used by the Team/admin transfer views
-      if(transferredCases.length){
-        const { data: profs } = await sb.from('profiles').select('id,full_name,email');
-        transferredOwnerNames = {};
-        (profs||[]).forEach(p=>{ transferredOwnerNames[p.id] = p.full_name || p.email; });
-      }
-    }catch(e){ console.error('load transferred cases failed', e); transferredCases = []; transferredOwnerNames = {}; }
+    await loadCases();
 
     // Weekly Report is a compliance tool, not a personal view — admins/PMs see org-wide,
     // supervisors see their office, case managers see their own (mirrors the old Dashboard scope).
@@ -5068,6 +5080,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='weekly')renderWeekly();
   if(b.dataset.tab==='admin'){loadAdminUsers();loadAdminTickets();loadTransferLog();}
   if(b.dataset.tab==='team')loadTeamView();
+  if(b.dataset.tab==='roster')loadCases().then(renderRoster).catch(e=>console.error('roster refresh failed', e));
 });
 document.addEventListener('click', e=>{
   const wrap = document.getElementById('notifWrap');
