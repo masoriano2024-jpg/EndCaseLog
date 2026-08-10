@@ -483,7 +483,6 @@
       <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:14px;color:var(--navy)">Contact Log This Week</div>
       <div style="display:flex;gap:8px">
         <button class="btn green sm" onclick="exportCSV()">⬇ Export to Excel (.csv)</button>
-        <button class="btn ghost sm" onclick="recalcWeekly()">↻ Recalculate</button>
       </div>
     </div>
     <div style="overflow-x:auto">
@@ -932,6 +931,21 @@
   </div>
 </div>
 
+<!-- REOPEN CASE MODAL -->
+<div class="modal-bg" id="reopenModal">
+  <div class="modal">
+    <h3>Reopen case</h3>
+    <input type="hidden" id="reopenCaseId">
+    <label>Reason</label>
+    <textarea id="reopenReason" placeholder="e.g. Closed in error — client is still eligible"></textarea>
+    <div id="reopenMsg" style="font-size:12px;font-weight:700;min-height:16px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn ghost" onclick="closeModal('reopenModal')">Cancel</button>
+      <button class="btn gold" onclick="submitReopen()">Reopen Case</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---------- SUPABASE INIT ---------- */
 const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
@@ -1031,7 +1045,7 @@ async function logout(){
   currentUser = null;
   currentProfile = null;
   if(maintenancePoll){ clearInterval(maintenancePoll); maintenancePoll = null; }
-  cases=[]; logs=[]; weekly=[]; roster=[];
+  cases=[]; logs=[]; roster=[];
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('loginEmail').value = '';
@@ -2870,6 +2884,49 @@ async function submitTransfer(){
   }
 }
 
+/* ---------- CASE REOPEN ---------- */
+function openReopenModal(caseId){
+  document.getElementById('reopenCaseId').value = caseId;
+  document.getElementById('reopenReason').value = '';
+  document.getElementById('reopenMsg').textContent = '';
+  show('reopenModal');
+}
+
+async function submitReopen(){
+  const caseId = parseInt(document.getElementById('reopenCaseId').value);
+  const reason = document.getElementById('reopenReason').value.trim();
+  const msg = document.getElementById('reopenMsg');
+  if(!reason){ msg.style.color='var(--red)'; msg.textContent='A reason is required.'; return; }
+  try{
+    const { data: rpcData, error: rpcErr } = await sb.rpc('reopen_case',
+      { p_case_id: caseId, p_reason: reason });
+    if(rpcErr) throw rpcErr;
+    const info = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    const ownerId = info && info.owner_id;
+    const supId = info && info.owner_supervisor;
+    const byName = currentProfile?.full_name || 'Someone';
+    if(ownerId && ownerId !== currentUser?.id){
+      await notify(ownerId, { type:'reopen', title:`Case #${caseId} reopened`,
+        body:`Reopened by ${byName}: ${reason}`, link_type:'case', link_id:caseId });
+    } else if(supId){
+      await notify(supId, { type:'reopen', title:`Case #${caseId} reopened`,
+        body:`Reopened by ${byName}: ${reason}`, link_type:'case', link_id:caseId });
+    }
+    closeModal('reopenModal');
+    if(activeRosterId === caseId){
+      await loadCases();
+      openClientProfile(caseId, true);
+      renderAll();
+    } else if(typeof openTeamClientProfile==='function' && teamCurrentView && teamCurrentView.type==='user'){
+      await drillIntoUser(teamCurrentView.userId, teamCurrentView.userName, teamCurrentView.office, teamCurrentView.mode);
+      openTeamClientProfile(caseId);
+    }
+  }catch(e){
+    console.error('reopen failed', e);
+    msg.style.color='var(--red)'; msg.textContent='Reopen failed: ' + (e.message||e);
+  }
+}
+
 /* ---------- READ-ONLY CASE CARD (for viewing a team member's dashboard) ---------- */
 function renderReadOnlyCard(c){
   if(!['outreach','intake','open'].includes(c.status)){
@@ -3041,6 +3098,9 @@ async function openTeamClientProfile(id){
       <div style="font-size:13px;color:var(--gray);padding:10px 0 4px">
         ${c.status==='outreach'||c.status==='intake'?`<b>Current step:</b> ${c.step+1} of ${steps.length} — ${esc(stepLabel)}`:''}
       </div>`;
+    if(['closed','declined','completed'].includes(c.status) && (isSupervisor()||isPM()||isAdmin())){
+      caseHtml += `<button class="btn sm gold" style="margin-top:8px" onclick="openReopenModal(${c.id})">Reopen Case</button>`;
+    }
   } else {
     caseHtml='<div style="font-size:13px;color:var(--gray-light);padding:8px 0">No active case found.</div>';
   }
@@ -3203,7 +3263,7 @@ async function drillIntoUser(userId, userName, office, mode){
       openedAt:r.opened_at, customSteps:r.custom_steps||null,
       flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
       flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
-      tier:r.tier||null, pathCStep:r.path_c_step||0
+      tier:r.tier||null, pathCStep:r.path_c_step||0, closedFromStatus:r.closed_from_status||null
     }));
     const idList = allCases.map(c=>c.id);
     teamDrillUserCases = allCases;
@@ -3536,7 +3596,6 @@ let transferredCases = []; // cases this user previously owned, now transferred 
 let transferredOwnerNames = {}; // to_user_id -> display name, for the "Transferred to X" badge
 let reportCases = []; // org/office-scoped cases for Weekly Report compliance stats only
 let logs = [];
-let weekly = [];
 let roster = {}; // id -> name
 
 /* ---------- STORAGE (Supabase + localStorage cache) ---------- */
@@ -3546,14 +3605,13 @@ function cacheWrite(){
   try{
     localStorage.setItem('cases', JSON.stringify(cases));
     localStorage.setItem('logs', JSON.stringify(logs));
-    localStorage.setItem('weekly', JSON.stringify(weekly));
     localStorage.setItem('roster', JSON.stringify(roster));
     localStorage.setItem('outreach_tpl', JSON.stringify(OUTREACH));
     localStorage.setItem('intake_tpl', JSON.stringify(INTAKE));
   }catch(e){console.warn('cache write failed',e)}
 }
 function cacheRead(){
-  for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['weekly',v=>weekly=v],['roster',v=>roster=v]]){
+  for(const [k,setter] of [['cases',v=>cases=v],['logs',v=>logs=v],['roster',v=>roster=v]]){
     try{ const raw=localStorage.getItem(k); if(raw) setter(JSON.parse(raw)); }catch(e){}
   }
   try{ const r=localStorage.getItem('outreach_tpl'); if(r) OUTREACH=JSON.parse(r); }catch(e){}
@@ -3578,7 +3636,7 @@ async function loadCases(){
     openedAt:r.opened_at, customSteps:r.custom_steps||null,
     flaggedForReview:r.flagged_for_review||false, flagNote:r.flag_note||null,
     flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
-    tier:r.tier||null, pathCStep:r.path_c_step||0
+    tier:r.tier||null, pathCStep:r.path_c_step||0, closedFromStatus:r.closed_from_status||null
   }));
 
   // Cases this user previously owned (transferred away) — read-only history.
@@ -3661,11 +3719,6 @@ async function load(){
       if(pathCRows.length>0) PATH_C=pathCRows.map(r=>({t:r.label}));
     }
 
-    // weekly
-    const {data:wData,error:wErr}=await sb.from('weekly_report').select('*');
-    if(wErr) throw wErr;
-    weekly=(wData||[]).map(r=>[r.week_ending,r.contacts_logged,r.notes||'']);
-
     cacheWrite();
     syncDone();
     renderAll();
@@ -3684,7 +3737,8 @@ async function saveCase(c){
       opened_at:c.openedAt||null, custom_steps:c.customSteps||null,
       user_id: currentUser?.id || null,
       office: currentProfile?.office || null,
-      tier: c.tier||null, path_c_step: c.pathCStep||0
+      tier: c.tier||null, path_c_step: c.pathCStep||0,
+      closed_from_status: c.closedFromStatus||null
     },{onConflict:'id'});
     if(error) throw error;
     // roster name
@@ -4124,6 +4178,13 @@ function caseWorkflowActionsHtml(c){
         <button class="btn sm ghost" onclick="deleteClient(${c.id})" title="Delete entirely">🗑</button>
       </div>`;
   }
+  if(['closed','declined','completed'].includes(c.status)){
+    return `
+      <div class="case-actions">
+        <span style="flex:1"></span>
+        <button class="btn sm gold" onclick="openReopenModal(${c.id})">Reopen Case</button>
+      </div>`;
+  }
   return '';
 }
 
@@ -4408,7 +4469,7 @@ function advancePathC(id){
 function closeOpenCase(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
   if(!confirm('Close this open case as resolved?'))return;
-  c.status='completed';c.closed=todayISO();saveCase(c);renderAll();
+  c.closedFromStatus='open';c.status='completed';c.closed=todayISO();saveCase(c);renderAll();
 }
 function reopenIntake(id){
   const c=cases.find(c=>c.id===id&&c.status==='open');if(!c)return;
@@ -4422,12 +4483,12 @@ function prevStep(id){const c=cases.find(c=>c.id===id);if(c&&c.step>0){c.step--;
 function closeIntakeCase(id){
   if(!confirm(`Close case #${id} from intake? This will mark it as closed.`))return;
   const c=cases.find(c=>c.id===id);if(!c)return;
-  c.status='closed';c.closed=todayISO();saveCase(c);renderAll();
+  c.closedFromStatus=c.status;c.status='closed';c.closed=todayISO();saveCase(c);renderAll();
 }
 function closeCase(id,status){
   const c=cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'));if(!c)return;
   if(!confirm(status==='declined'?'Close case as DECLINED in TCR?':'Close this case (no contact made)?'))return;
-  c.status=status;c.closed=todayISO();saveCase(c);renderAll();
+  c.closedFromStatus=c.status;c.status=status;c.closed=todayISO();saveCase(c);renderAll();
 }
 function deleteClient(id){
   if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), case notes, client to-dos, audit entries, and the name from the roster. This cannot be undone.`))return;
@@ -4443,7 +4504,7 @@ function openDecide(id){decideId=id;show('decideModal')}
 function decide(kind){
   const c=cases.find(c=>c.id===decideId);if(!c){closeModal('decideModal');return;}
   if(kind==='accept'){c.status='intake';c.step=0;c.intakeStart=todayISO();}
-  else{c.status='declined';c.closed=todayISO();}
+  else{c.closedFromStatus=c.status;c.status='declined';c.closed=todayISO();}
   closeModal('decideModal');saveCase(c);renderAll();
 }
 
@@ -4825,18 +4886,6 @@ function renderWeekStats(wedISO){
     statCard('Closed This Week',closedThisWeek,'resolved or no contact','var(--gray)')+
     statCard('Total Active Caseload',activeCaseload,'all open cases','var(--navy)');
 }
-function recalcWeekly(){
-  const byWeek={};
-  logs.forEach(l=>{const w=weekEndingFor(l.date);byWeek[w]=byWeek[w]||{contacts:0};byWeek[w].contacts++;});
-  Object.keys(byWeek).forEach(w=>{
-    let row=weekly.find(r=>r[0]===w);
-    if(!row){row=[w,'',''];weekly.push(row);}
-    row[1]=byWeek[w].contacts;
-  });
-  weekly.sort((a,b)=>a[0]<b[0]?-1:1);
-  save();renderWeekly();
-}
-const WK_COLS=['Week Ending','Contacts Logged','Notes'];
 function renderWeekly(){
   if(!viewingWeek) viewingWeek=weekEndingFor(todayISO());
 
@@ -4926,16 +4975,19 @@ async function downloadFloodReport(btn){
   }
 }
 function exportCSV(){
+  if(!viewingWeek) viewingWeek=weekEndingFor(todayISO());
+  const start=weekStart(viewingWeek);
+  const end=viewingWeek;
   const headers=['Week Ending','Date','Client ID','Method','Notes'];
   let csv=headers.join(',')+'\n';
-  const sorted=[...logs].sort((a,b)=>b.date.localeCompare(a.date));
-  sorted.forEach(l=>{
-    const row=[weekEndingFor(l.date),l.date,l.id||'',l.method||'',l.notes||''];
+  const weekLogs=logs.filter(l=>l.date>=start&&l.date<=end).sort((a,b)=>b.date.localeCompare(a.date));
+  weekLogs.forEach(l=>{
+    const row=[viewingWeek,l.date,l.id||'',l.method||'',l.notes||''];
     csv+=row.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='weekly_report_'+todayISO()+'.csv';a.click();
+  a.download='weekly_report_'+viewingWeek+'.csv';a.click();
 }
 
 // ---- Data backup (admin-only): download all tables as Excel + JSON ----
