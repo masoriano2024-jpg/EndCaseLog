@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DCM Compliance Audit</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Open+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+  :root{
+    --bg:#0b1420;
+    --bg-deep:#070d16;
+    --surface:#141f2e;
+    --surface-alt:#182636;
+    --ink:#e8eef5;
+    --gray:#9fb0c3;
+    --gray-light:#5f7387;
+    --line:#25384f;
+    --blue:#2f8fe0;
+    --blue-bright:#4aa8f5;
+    --blue-light:#7bb8e8;
+    --green:#3ecb83;
+    --green-soft:#123324;
+    --red:#ef6a5d;
+    --red-soft:#3a1a17;
+    --amber:#e0a53f;
+    --amber-soft:#3a2c12;
+    --shadow:0 4px 20px rgba(0,0,0,.45);
+    --shadow-card:0 1px 3px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Open Sans',system-ui,sans-serif;
+    background:var(--bg);
+    background-image:linear-gradient(160deg,var(--bg) 0%,var(--bg-deep) 100%);
+    color:var(--ink);
+    min-height:100vh;
+    line-height:1.55;
+    padding:0 0 80px;
+  }
+  header.top{
+    background:linear-gradient(135deg,#0c1420 0%,#141f2e 60%,#182636 100%);
+    padding:0 32px;
+    display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:0;
+    border-bottom:4px solid var(--blue);
+    min-height:72px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;padding:14px 0}
+  .brand .mark{font-size:24px}
+  .brand h1{font-family:'Poppins',sans-serif;font-weight:800;font-size:20px;color:var(--ink);letter-spacing:.5px;text-transform:uppercase}
+  .brand h1 span{color:var(--blue-light)}
+  .brand .sub{font-size:11px;color:var(--gray);font-weight:500;letter-spacing:.8px;text-transform:uppercase;margin-top:2px}
+
+  nav.tabs{display:flex;gap:0;background:var(--surface-alt);padding:0;border-bottom:1px solid var(--line)}
+  nav.tabs button{
+    font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;
+    background:none;border:none;border-bottom:3px solid transparent;
+    padding:14px 0;cursor:pointer;color:var(--gray);
+    letter-spacing:.6px;text-transform:uppercase;transition:color .15s,border-color .15s;
+    flex:1;text-align:center;
+  }
+  nav.tabs button.active{color:var(--ink);border-bottom-color:var(--blue-bright)}
+  nav.tabs button:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+
+  main{max-width:1100px;margin:0 auto;padding:28px 24px}
+  .panel{display:none}
+  .panel.show{display:block;animation:fade .3s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+  h2.sec{font-family:'Poppins',sans-serif;font-weight:700;font-size:20px;margin-bottom:4px;color:var(--ink);letter-spacing:.2px}
+  .sec-note{color:var(--gray);font-size:13px;margin-bottom:20px}
+
+  .btn{
+    font-family:'Poppins',sans-serif;font-size:12px;font-weight:700;
+    border:none;background:var(--blue);color:#fff;
+    padding:9px 18px;border-radius:6px;cursor:pointer;letter-spacing:.5px;text-transform:uppercase;
+  }
+  .btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--ink)}
+  .btn.gold{background:var(--amber);color:#1a1206}
+  .btn.red{background:var(--red);color:#fff}
+  .btn.green{background:var(--green);color:#0a1c12}
+  .btn.sm{padding:6px 12px;font-size:11px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:18px;margin-bottom:16px}
+
+  input,select,textarea{
+    font-family:'Open Sans',sans-serif;font-size:14px;border:1.5px solid var(--line);
+    padding:9px 12px;border-radius:6px;background:var(--surface-alt);color:var(--ink);width:100%;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+  label{display:block;font-size:12px;font-weight:700;color:var(--gray);margin-bottom:6px;font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.5px}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:480px;box-shadow:var(--shadow)}
+
+  .save-flash{color:var(--green);font-weight:700;font-size:13px;opacity:0;transition:opacity .3s}
+  .save-flash.show{opacity:1}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ── -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0b1420 0%,#182636 100%);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:22px;margin-bottom:8px">🔒</div>
+      <div style="font-size:12px;color:var(--gray);font-weight:600;letter-spacing:1px;text-transform:uppercase">DCM Compliance Audit — Admin Only</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label>Email</label>
+      <input id="loginEmail" type="email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')loginSubmit()">
+    </div>
+    <div style="margin-bottom:24px">
+      <label>Password</label>
+      <input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
+    </div>
+    <button onclick="loginSubmit()" class="btn" style="width:100%;padding:13px;font-size:14px">Sign In</button>
+    <div id="loginError" style="margin-top:12px;font-size:13px;color:var(--red);text-align:center;min-height:18px;font-weight:600"></div>
+  </div>
+</div>
+
+<!-- ── NOT AUTHORIZED SCREEN ── -->
+<div id="notAuthorized" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:20px">
+  <div style="font-size:40px">🚫</div>
+  <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:18px">This tool is admin-only.</div>
+  <div style="color:var(--gray);font-size:14px;max-width:360px">Your account doesn't have access to the compliance audit tool. Contact an administrator if you believe this is a mistake.</div>
+  <button class="btn ghost" onclick="logout()" style="margin-top:8px">Sign out</button>
+</div>
+
+<div id="appShell" style="display:none">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">🛡️</div>
+      <div>
+        <h1>DCM <span>Compliance Audit</span></h1>
+        <div class="sub">Admin Only · Dark Mode</div>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div id="userNameDisplay" style="font-family:'Poppins',sans-serif;font-size:12px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.4px"></div>
+      <button onclick="logout()" style="margin-top:4px;background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--gray);font-size:10px;font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:.4px;padding:3px 10px;border-radius:4px;cursor:pointer;text-transform:uppercase">Sign Out</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="mainNav">
+    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="newaudit">New Audit</button>
+    <button data-tab="log">Audit Log</button>
+    <button data-tab="requirements">Requirements</button>
+  </nav>
+
+  <main>
+    <section class="panel show" id="dashboard">
+      <h2 class="sec">Compliance Dashboard</h2>
+      <p class="sec-note">Collective compliance grade per DCM, based on all audits performed.</p>
+      <div id="dashboardWrap"></div>
+    </section>
+
+    <section class="panel" id="newaudit">
+      <h2 class="sec">New Audit</h2>
+      <p class="sec-note">Pick a DCM, pick one of their cases, then work through the requirements checklist.</p>
+      <div class="card" style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <label>DCM</label>
+          <select id="naDcmSelect" onchange="naDcmChanged()"><option value="">Select a DCM…</option></select>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <label>Case</label>
+          <select id="naCaseSelect" disabled onchange="naCaseChanged()"><option value="">Select a case…</option></select>
+        </div>
+      </div>
+      <div id="naChecklistWrap"></div>
+    </section>
+
+    <section class="panel" id="log">
+      <h2 class="sec">Audit Log</h2>
+      <p class="sec-note">Every audit performed, most recent first.</p>
+      <div class="card" style="max-width:320px">
+        <label>Filter by DCM</label>
+        <select id="logDcmFilter" onchange="renderLogList()"><option value="">All DCMs</option></select>
+      </div>
+      <div id="logListWrap"></div>
+    </section>
+
+    <section class="panel" id="requirements">
+      <h2 class="sec">Compliance Requirements</h2>
+      <p class="sec-note">Edit the checklist used for new audits. Changes here do not affect audits already saved.</p>
+      <div class="card">
+        <label>New Section Name</label>
+        <div style="display:flex;gap:8px">
+          <input id="reqNewSectionInput" placeholder="e.g. Intake" onkeydown="if(event.key==='Enter')reqAddSection()">
+          <button class="btn sm" style="flex-shrink:0" onclick="reqAddSection()">+ Add Section</button>
+        </div>
+      </div>
+      <div id="reqSectionsWrap"></div>
+      <div style="margin-top:16px;display:flex;gap:12px;align-items:center">
+        <button class="btn gold" onclick="reqSaveAll()">💾 Save Requirements</button>
+        <span class="save-flash" id="reqSaveFlash">Saved ✓</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ---------- SUPABASE INIT ---------- */
+const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzcXN0amt5dXl6dHZnbHV0dXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDg1NzUsImV4cCI6MjA5NzEyNDU3NX0.p9mHM3Ervz7Z5qezqDGUiSrb-u6JqKqLJSEEE8EyAio';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ---------- HELPERS ---------- */
+function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+function escAttr(s){return String(s==null?'':s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmt(iso){if(!iso)return'—';const d=new Date(iso+(iso.length<=10?'T00:00:00':''));return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+
+/* ---------- AUTH STATE ---------- */
+let currentUser = null;
+let currentProfile = null;
+
+async function loginSubmit(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Please enter your email and password.'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = error.message; return; }
+  await bootApp(data.user);
+}
+
+async function logout(){
+  await sb.auth.signOut();
+  currentUser = null;
+  currentProfile = null;
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('notAuthorized').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
+async function bootApp(user){
+  currentUser = user;
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  currentProfile = profile;
+
+  if(!profile || profile.role !== 'admin'){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = 'none';
+    document.getElementById('notAuthorized').style.display = 'flex';
+    return;
+  }
+
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('notAuthorized').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  document.getElementById('userNameDisplay').textContent = profile.full_name || user.email;
+  renderDashboardTab();
+}
+
+/* ---------- SHARED CHECKLIST HELPERS ---------- */
+function sectionAllItems(section){ return section.items || []; }
+function checklistTotal(checklist){ return checklist.reduce((a,s)=>a+sectionAllItems(s).length,0); }
+function computeGrade(checklist, checked){
+  let total=0, done=0, criticalMissed=false;
+  checklist.forEach(section=>{
+    sectionAllItems(section).forEach(item=>{
+      total++;
+      if(checked[item.id]) done++;
+      else if(item.critical) criticalMissed=true;
+    });
+  });
+  let pct = total ? Math.round((done/total)*100) : 0;
+  if(criticalMissed && pct>60) pct=60;
+  return { pct, done, total, criticalMissed };
+}
+function gradeColor(pct){ return pct>=85?'var(--green)':pct>=60?'var(--amber)':'var(--red)'; }
+
+/* ---------- REQUIREMENTS EDITOR ---------- */
+let reqChecklist = [];
+
+async function loadRequirements(){
+  const { data, error } = await sb.from('audit_requirements').select('*').order('updated_at',{ascending:false}).limit(1);
+  if(error){ console.error('loadRequirements failed', error); reqChecklist = []; return; }
+  reqChecklist = (data && data[0] && data[0].checklist) ? data[0].checklist : [];
+}
+
+function reqNewId(prefix){ return prefix+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); }
+
+function renderRequirementsTab(){
+  const wrap = document.getElementById('reqSectionsWrap');
+  if(reqChecklist.length===0){
+    wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No requirements yet. Add a section above to get started.</div>';
+    return;
+  }
+  wrap.innerHTML = reqChecklist.map((section,sIdx)=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.4px">${esc(section.label)}</div>
+        <button class="btn sm red" onclick="reqDeleteSection(${sIdx})">Delete Section</button>
+      </div>
+      ${section.items.map((item,iIdx)=>`
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid var(--line)">
+          <div style="flex:1">
+            <div>${esc(item.text)}${item.note?`<span style="color:var(--gray-light);font-size:12px"> — ${esc(item.note)}</span>`:''}</div>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--gray)">
+              <input type="checkbox" style="width:auto" ${item.critical?'checked':''} onchange="reqToggleCritical(${sIdx},${iIdx})"> Critical
+            </label>
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <button class="btn sm ghost" onclick="reqMoveItem(${sIdx},${iIdx},-1)" ${iIdx===0?'disabled':''}>↑</button>
+            <button class="btn sm ghost" onclick="reqMoveItem(${sIdx},${iIdx},1)" ${iIdx===section.items.length-1?'disabled':''}>↓</button>
+            <button class="btn sm red" onclick="reqDeleteItem(${sIdx},${iIdx})">Delete</button>
+          </div>
+        </div>
+      `).join('')}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="reqItemText_${sIdx}" placeholder="New item text">
+        <input id="reqItemNote_${sIdx}" placeholder="Note (optional)" style="max-width:200px">
+        <button class="btn sm" style="flex-shrink:0" onclick="reqAddItem(${sIdx})">+ Add Item</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function reqAddSection(){
+  const input = document.getElementById('reqNewSectionInput');
+  const label = input.value.trim();
+  if(!label) return;
+  reqChecklist.push({ id: reqNewId('sec'), label, items: [] });
+  input.value = '';
+  renderRequirementsTab();
+}
+function reqDeleteSection(sIdx){
+  if(!confirm('Delete this section and all its items?')) return;
+  reqChecklist.splice(sIdx,1);
+  renderRequirementsTab();
+}
+function reqAddItem(sIdx){
+  const textInput = document.getElementById('reqItemText_'+sIdx);
+  const noteInput = document.getElementById('reqItemNote_'+sIdx);
+  const text = textInput.value.trim();
+  if(!text) return;
+  reqChecklist[sIdx].items.push({ id: reqNewId('item'), text, note: noteInput.value.trim()||undefined, critical: false });
+  renderRequirementsTab();
+}
+function reqDeleteItem(sIdx,iIdx){
+  reqChecklist[sIdx].items.splice(iIdx,1);
+  renderRequirementsTab();
+}
+function reqToggleCritical(sIdx,iIdx){
+  reqChecklist[sIdx].items[iIdx].critical = !reqChecklist[sIdx].items[iIdx].critical;
+  renderRequirementsTab();
+}
+function reqMoveItem(sIdx,iIdx,dir){
+  const items = reqChecklist[sIdx].items;
+  const target = iIdx+dir;
+  if(target<0 || target>=items.length) return;
+  [items[iIdx], items[target]] = [items[target], items[iIdx]];
+  renderRequirementsTab();
+}
+let reqSaving = false;
+async function reqSaveAll(){
+  if(reqSaving) return;
+  reqSaving = true;
+  try {
+    const { error } = await sb.from('audit_requirements').insert({
+      checklist: reqChecklist, updated_by: currentUser.id
+    });
+    if(error){ alert('Save failed: '+error.message); return; }
+    const fl = document.getElementById('reqSaveFlash');
+    fl.classList.add('show'); setTimeout(()=>fl.classList.remove('show'), 2000);
+  } finally {
+    reqSaving = false;
+  }
+}
+
+/* ---------- NEW AUDIT ---------- */
+let naDcmId = null, naCaseId = null, naRosterMap = {}, naChecked = {}, naNotesText = '', naSaving = false;
+
+async function renderNewAuditTab(){
+  await loadRequirements();
+  const sel = document.getElementById('naDcmSelect');
+  const { data: dcms, error } = await sb.from('profiles').select('id,full_name,email')
+    .eq('role','case_manager').eq('active', true).order('full_name');
+  if(error){ console.error('load DCMs failed', error); alert('Could not load DCMs: '+error.message); return; }
+  sel.innerHTML = '<option value="">Select a DCM…</option>' +
+    (dcms||[]).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('');
+  document.getElementById('naCaseSelect').innerHTML = '<option value="">Select a case…</option>';
+  document.getElementById('naCaseSelect').disabled = true;
+  document.getElementById('naChecklistWrap').innerHTML = '';
+  naDcmId = null; naCaseId = null; naChecked = {}; naNotesText = '';
+}
+
+async function naDcmChanged(){
+  naDcmId = document.getElementById('naDcmSelect').value || null;
+  naCaseId = null; naChecked = {}; naNotesText = '';
+  document.getElementById('naChecklistWrap').innerHTML = '';
+  const caseSel = document.getElementById('naCaseSelect');
+  if(!naDcmId){ caseSel.innerHTML = '<option value="">Select a case…</option>'; caseSel.disabled = true; return; }
+
+  const { data: cs, error } = await sb.from('cases').select('id,status').eq('user_id', naDcmId).order('id');
+  if(error){ console.error('load cases failed', error); alert('Could not load cases: '+error.message); return; }
+  const ids = (cs||[]).map(c=>c.id);
+  naRosterMap = {};
+  if(ids.length>0){
+    const { data: rosterRows } = await sb.from('roster').select('*').in('case_id', ids);
+    (rosterRows||[]).forEach(r=>{ naRosterMap[r.case_id] = r.name; });
+  }
+  caseSel.innerHTML = '<option value="">Select a case…</option>' +
+    (cs||[]).map(c=>`<option value="${c.id}">#${c.id} — ${esc(naRosterMap[c.id]||'Unnamed')} (${esc(c.status)})</option>`).join('');
+  caseSel.disabled = (cs||[]).length===0;
+}
+
+function naCaseChanged(){
+  naCaseId = document.getElementById('naCaseSelect').value ? parseInt(document.getElementById('naCaseSelect').value,10) : null;
+  naChecked = {}; naNotesText = '';
+  renderNAChecklist();
+}
+
+function renderNAChecklist(){
+  const wrap = document.getElementById('naChecklistWrap');
+  if(!naCaseId){ wrap.innerHTML=''; return; }
+  const grade = computeGrade(reqChecklist, naChecked);
+  let html = `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <div style="font-family:'Poppins',sans-serif;font-weight:700">Case #${naCaseId} — ${esc(naRosterMap[naCaseId]||'Unnamed')}</div>
+    <div style="text-align:right">
+      <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:28px;color:${gradeColor(grade.pct)}">${grade.pct}%</div>
+      <div style="color:var(--gray);font-size:12px">${grade.done} of ${grade.total} complete${grade.criticalMissed?' · critical item missing':''}</div>
+    </div>
+  </div>`;
+  reqChecklist.forEach(section=>{
+    html += `<div class="card"><div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">${esc(section.label)}</div>`;
+    sectionAllItems(section).forEach(item=>{
+      const checked = !!naChecked[item.id];
+      html += `<div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0" onclick="naToggle('${item.id}')">
+        <input type="checkbox" style="width:auto;margin-top:2px" ${checked?'checked':''} onclick="event.stopPropagation();naToggle('${item.id}')">
+        <div>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:11px;font-weight:700">CRITICAL</span>':''}${item.note?`<div style="color:var(--gray-light);font-size:12px">${esc(item.note)}</div>`:''}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `<div class="card">
+    <label>Notes (optional)</label>
+    <textarea id="naNotes" rows="3" placeholder="Any observations about this audit" oninput="naNotesText=this.value">${esc(naNotesText||'')}</textarea>
+    <div style="margin-top:12px;display:flex;gap:12px;align-items:center">
+      <button class="btn gold" onclick="naSaveAudit()">Save Audit</button>
+      <span class="save-flash" id="naSaveFlash">Saved ✓</span>
+    </div>
+  </div>`;
+  wrap.innerHTML = html;
+}
+function naToggle(itemId){ naChecked[itemId] = !naChecked[itemId]; renderNAChecklist(); }
+
+async function naSaveAudit(){
+  if(naSaving) return;
+  if(!naDcmId || !naCaseId){ alert('Select a DCM and case first.'); return; }
+  if(!reqChecklist || reqChecklist.length===0){ alert('Requirements could not be loaded — reload the page before running an audit.'); return; }
+  naSaving = true;
+  try {
+    const grade = computeGrade(reqChecklist, naChecked);
+    const notes = (naNotesText||'').trim() || null;
+    const { error } = await sb.from('dcm_audits').insert({
+      dcm_user_id: naDcmId, case_id: naCaseId, admin_user_id: currentUser.id,
+      requirements_snapshot: reqChecklist, checked: naChecked, grade: grade.pct, notes
+    });
+    if(error){ alert('Save failed: '+error.message); return; }
+    naChecked = {};
+    naNotesText = '';
+    renderNAChecklist();
+    const fl = document.getElementById('naSaveFlash');
+    if(fl){ fl.classList.add('show'); setTimeout(()=>fl.classList.remove('show'), 2000); }
+  } finally {
+    naSaving = false;
+  }
+}
+
+/* ---------- AUDIT LOG ---------- */
+let logAudits = [], logProfileNames = {}, logExpanded = null;
+
+async function renderLogTab(){
+  const { data: profs, error: profErr } = await sb.from('profiles').select('id,full_name,email,role');
+  if(profErr){ console.error('load profiles failed', profErr); alert('Could not load audit log: '+profErr.message); return; }
+  logProfileNames = {};
+  (profs||[]).forEach(p=>{ logProfileNames[p.id] = p.full_name || p.email; });
+
+  const { data: audits, error } = await sb.from('dcm_audits').select('*').order('created_at',{ascending:false});
+  if(error){ console.error('load audits failed', error); alert('Could not load audit log: '+error.message); return; }
+  logAudits = audits || [];
+
+  const dcmIds = [...new Set(logAudits.map(a=>a.dcm_user_id))];
+  const filterSel = document.getElementById('logDcmFilter');
+  filterSel.innerHTML = '<option value="">All DCMs</option>' +
+    dcmIds.map(id=>`<option value="${id}">${esc(logProfileNames[id]||'Unknown')}</option>`).join('');
+
+  renderLogList();
+}
+
+function renderLogList(){
+  const filter = document.getElementById('logDcmFilter').value;
+  const wrap = document.getElementById('logListWrap');
+  const rows = filter ? logAudits.filter(a=>a.dcm_user_id===filter) : logAudits;
+  if(rows.length===0){ wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No audits recorded yet.</div>'; return; }
+  wrap.innerHTML = rows.map(a=>{
+    const expanded = logExpanded===a.id;
+    let detail = '';
+    if(expanded){
+      detail = (a.requirements_snapshot||[]).map(section=>`
+        <div style="margin-top:10px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--gray)">${esc(section.label)}</div>
+        ${sectionAllItems(section).map(item=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">
+            <span>${a.checked && a.checked[item.id] ? '✅' : '❌'}</span>
+            <span>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:10px;font-weight:700">CRITICAL</span>':''}</span>
+          </div>
+        `).join('')}</div>
+      `).join('');
+    }
+    return `<div class="card" style="cursor:pointer" onclick="logToggleExpand(${a.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}</div>
+          <div style="color:var(--gray);font-size:12px">${fmt(a.created_at)}${a.notes?' · '+esc(a.notes):''}</div>
+        </div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:22px;color:${gradeColor(a.grade)}">${a.grade}%</div>
+      </div>
+      ${detail}
+    </div>`;
+  }).join('');
+}
+function logToggleExpand(id){ logExpanded = (logExpanded===id) ? null : id; renderLogList(); }
+
+/* ---------- DASHBOARD ---------- */
+async function renderDashboardTab(){
+  const wrap = document.getElementById('dashboardWrap');
+  const { data: dcms, error: dcmErr } = await sb.from('profiles').select('id,full_name,email')
+    .eq('role','case_manager').eq('active', true).order('full_name');
+  if(dcmErr){ console.error('load DCMs failed', dcmErr); alert('Could not load DCMs: '+dcmErr.message); return; }
+  const { data: audits, error: auditErr } = await sb.from('dcm_audits').select('*').order('created_at',{ascending:false});
+  if(auditErr){ console.error('load audits failed', auditErr); alert('Could not load audits: '+auditErr.message); return; }
+
+  if(!dcms || dcms.length===0){ wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No active DCMs found.</div>'; return; }
+
+  wrap.innerHTML = dcms.map(dcm=>{
+    const theirs = (audits||[]).filter(a=>a.dcm_user_id===dcm.id);
+    if(theirs.length===0){
+      return `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(dcm.full_name||dcm.email)}</div>
+        <div style="color:var(--gray-light);font-size:13px">No audits yet</div>
+      </div>`;
+    }
+    const avg = Math.round(theirs.reduce((a,x)=>a+x.grade,0) / theirs.length);
+    const mostRecent = theirs[0].grade;
+    const trend = mostRecent > avg ? '▲' : mostRecent < avg ? '▼' : '—';
+    const trendColor = mostRecent > avg ? 'var(--green)' : mostRecent < avg ? 'var(--red)' : 'var(--gray)';
+    return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(dcm.full_name||dcm.email)}</div>
+        <div style="color:var(--gray);font-size:12px">${theirs.length} audit${theirs.length!==1?'s':''} · most recent ${mostRecent}%</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:120px;height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+          <div style="width:${avg}%;height:100%;background:${gradeColor(avg)}"></div>
+        </div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:24px;color:${gradeColor(avg)}">${avg}%</div>
+        <div style="color:${trendColor};font-size:16px" title="vs. their average">${trend}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- TAB SWITCHING ---------- */
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('show'));
+  b.classList.add('active');
+  document.getElementById(b.dataset.tab).classList.add('show');
+  if(b.dataset.tab==='dashboard'){ renderDashboardTab(); }
+  if(b.dataset.tab==='requirements'){ loadRequirements().then(renderRequirementsTab); }
+  if(b.dataset.tab==='newaudit'){ renderNewAuditTab(); }
+  if(b.dataset.tab==='log'){ renderLogTab(); }
+});
+
+/* ---------- INIT ---------- */
+(async function(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session?.user){
+    await bootApp(session.user);
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+})();
+</script>
+</body>
+</html>
