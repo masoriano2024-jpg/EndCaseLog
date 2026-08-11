@@ -137,7 +137,7 @@
       <div class="mark">🛡️</div>
       <div>
         <h1>DCM <span>Compliance Audit</span></h1>
-        <div class="sub">Admin Only · Dark Mode</div>
+        <div class="sub">Admin Only</div>
       </div>
     </div>
     <div style="text-align:right">
@@ -168,10 +168,19 @@
           <label>DCM</label>
           <select id="naDcmSelect" onchange="naDcmChanged()"><option value="">Select a DCM…</option></select>
         </div>
-        <div style="flex:1;min-width:220px">
+        <div id="naCaseDropdownWrap" style="flex:1;min-width:220px">
           <label>Case</label>
           <select id="naCaseSelect" disabled onchange="naCaseChanged()"><option value="">Select a case…</option></select>
         </div>
+        <div id="naCaseManualWrap" style="flex:1;min-width:220px;display:none">
+          <label>Case ID</label>
+          <input type="number" id="naManualCaseIdInput" placeholder="e.g. 4821" oninput="naManualInputsChanged()">
+          <label style="margin-top:10px">Client name (optional)</label>
+          <input type="text" id="naManualLabelInput" placeholder="Jane Smith" oninput="naManualLabelInputsChanged()">
+        </div>
+      </div>
+      <div style="margin-top:-6px;margin-bottom:6px">
+        <a href="#" onclick="naToggleManualMode();return false" id="naManualToggleLink" style="font-size:12px;color:var(--blue-light)">Case not in the system? Enter manually</a>
       </div>
       <div id="naChecklistWrap"></div>
     </section>
@@ -381,6 +390,30 @@ async function reqSaveAll(){
 
 /* ---------- NEW AUDIT ---------- */
 let naDcmId = null, naCaseId = null, naRosterMap = {}, naChecked = {}, naNotesText = '', naSaving = false;
+let naManualMode = false, naManualLabel = '';
+
+function naToggleManualMode(){
+  naManualMode = !naManualMode;
+  document.getElementById('naCaseDropdownWrap').style.display = naManualMode ? 'none' : '';
+  document.getElementById('naCaseManualWrap').style.display = naManualMode ? '' : 'none';
+  document.getElementById('naManualToggleLink').textContent = naManualMode ? 'Use the case list instead' : 'Case not in the system? Enter manually';
+  document.getElementById('naCaseSelect').value = '';
+  document.getElementById('naManualCaseIdInput').value = '';
+  document.getElementById('naManualLabelInput').value = '';
+  naCaseId = null; naManualLabel = ''; naChecked = {}; naNotesText = '';
+  document.getElementById('naChecklistWrap').innerHTML = '';
+}
+
+function naManualInputsChanged(){
+  const raw = document.getElementById('naManualCaseIdInput').value;
+  naCaseId = raw ? parseInt(raw, 10) : null;
+  naChecked = {}; naNotesText = '';
+  renderNAChecklist();
+}
+function naManualLabelInputsChanged(){
+  naManualLabel = document.getElementById('naManualLabelInput').value;
+  if(naCaseId){ renderNAChecklist(); }
+}
 
 async function renderNewAuditTab(){
   await loadRequirements();
@@ -394,11 +427,16 @@ async function renderNewAuditTab(){
   document.getElementById('naCaseSelect').disabled = true;
   document.getElementById('naChecklistWrap').innerHTML = '';
   naDcmId = null; naCaseId = null; naChecked = {}; naNotesText = '';
+  naManualMode = false; naManualLabel = '';
+  document.getElementById('naCaseDropdownWrap').style.display = '';
+  document.getElementById('naCaseManualWrap').style.display = 'none';
+  document.getElementById('naManualToggleLink').textContent = 'Case not in the system? Enter manually';
 }
 
 async function naDcmChanged(){
   naDcmId = document.getElementById('naDcmSelect').value || null;
   naCaseId = null; naChecked = {}; naNotesText = '';
+  if(naManualMode){ naToggleManualMode(); }
   document.getElementById('naChecklistWrap').innerHTML = '';
   const caseSel = document.getElementById('naCaseSelect');
   if(!naDcmId){ caseSel.innerHTML = '<option value="">Select a case…</option>'; caseSel.disabled = true; return; }
@@ -426,8 +464,11 @@ function renderNAChecklist(){
   const wrap = document.getElementById('naChecklistWrap');
   if(!naCaseId){ wrap.innerHTML=''; return; }
   const grade = computeGrade(reqChecklist, naChecked);
+  const caseTitle = naManualMode
+    ? `Case #${naCaseId}${naManualLabel.trim()?' — '+esc(naManualLabel.trim()):''}`
+    : `Case #${naCaseId} — ${esc(naRosterMap[naCaseId]||'Unnamed')}`;
   let html = `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
-    <div style="font-family:'Poppins',sans-serif;font-weight:700">Case #${naCaseId} — ${esc(naRosterMap[naCaseId]||'Unnamed')}</div>
+    <div style="font-family:'Poppins',sans-serif;font-weight:700">${caseTitle}</div>
     <div style="text-align:right">
       <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:28px;color:${gradeColor(grade.pct)}">${grade.pct}%</div>
       <div style="color:var(--gray);font-size:12px">${grade.done} of ${grade.total} complete${grade.criticalMissed?' · critical item missing':''}</div>
@@ -464,9 +505,11 @@ async function naSaveAudit(){
   try {
     const grade = computeGrade(reqChecklist, naChecked);
     const notes = (naNotesText||'').trim() || null;
+    const caseLabel = naManualMode ? ((naManualLabel||'').trim() || null) : null;
     const { error } = await sb.from('dcm_audits').insert({
       dcm_user_id: naDcmId, case_id: naCaseId, admin_user_id: currentUser.id,
-      requirements_snapshot: reqChecklist, checked: naChecked, grade: grade.pct, notes
+      requirements_snapshot: reqChecklist, checked: naChecked, grade: grade.pct, notes,
+      case_label: caseLabel
     });
     if(error){ alert('Save failed: '+error.message); return; }
     naChecked = {};
@@ -519,10 +562,11 @@ function renderLogList(){
         `).join('')}</div>
       `).join('');
     }
+    const caseSuffix = a.case_label ? ` — ${esc(a.case_label)}` : '';
     return `<div class="card" style="cursor:pointer" onclick="logToggleExpand(${a.id})">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}</div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}${caseSuffix}</div>
           <div style="color:var(--gray);font-size:12px">${fmt(a.created_at)}${a.notes?' · '+esc(a.notes):''}</div>
         </div>
         <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:22px;color:${gradeColor(a.grade)}">${a.grade}%</div>
