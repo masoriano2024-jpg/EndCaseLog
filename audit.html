@@ -108,7 +108,7 @@
   <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.6)">
     <div style="text-align:center;margin-bottom:28px">
       <div style="font-size:22px;margin-bottom:8px">🔒</div>
-      <div style="font-size:12px;color:var(--gray);font-weight:600;letter-spacing:1px;text-transform:uppercase">DCM Compliance Audit — Admin Only</div>
+      <div style="font-size:12px;color:var(--gray);font-weight:600;letter-spacing:1px;text-transform:uppercase">DCM Compliance Audit — Leadership Only</div>
     </div>
     <div style="margin-bottom:16px">
       <label>Email</label>
@@ -126,7 +126,7 @@
 <!-- ── NOT AUTHORIZED SCREEN ── -->
 <div id="notAuthorized" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:20px">
   <div style="font-size:40px">🚫</div>
-  <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:18px">This tool is admin-only.</div>
+  <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:18px">This tool is for leadership only.</div>
   <div style="color:var(--gray);font-size:14px;max-width:360px">Your account doesn't have access to the compliance audit tool. Contact an administrator if you believe this is a mistake.</div>
   <button class="btn ghost" onclick="logout()" style="margin-top:8px">Sign out</button>
 </div>
@@ -137,7 +137,7 @@
       <div class="mark">🛡️</div>
       <div>
         <h1>DCM <span>Compliance Audit</span></h1>
-        <div class="sub">Admin and Supervisors Only</div>
+        <div class="sub">Leadership Only · Dark Mode</div>
       </div>
     </div>
     <div style="text-align:right">
@@ -243,6 +243,9 @@ function fmt(iso){if(!iso)return'—';const d=new Date(iso+(iso.length<=10?'T00:
 /* ---------- AUTH STATE ---------- */
 let currentUser = null;
 let currentProfile = null;
+function isAdmin(){ return currentProfile?.role === 'admin'; }
+function isPM(){ return currentProfile?.role === 'program_manager'; }
+function isSupervisor(){ return currentProfile?.role === 'supervisor'; }
 
 async function loginSubmit(){
   const email = document.getElementById('loginEmail').value.trim();
@@ -272,7 +275,7 @@ async function bootApp(user){
   const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
   currentProfile = profile;
 
-  if(!profile || profile.role !== 'admin'){
+  if(!profile || !['admin','program_manager','supervisor'].includes(profile.role)){
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appShell').style.display = 'none';
     document.getElementById('notAuthorized').style.display = 'flex';
@@ -283,6 +286,7 @@ async function bootApp(user){
   document.getElementById('notAuthorized').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
   document.getElementById('userNameDisplay').textContent = profile.full_name || user.email;
+  document.querySelector('nav.tabs button[data-tab="requirements"]').style.display = isAdmin() ? '' : 'none';
   renderDashboardTab();
 }
 
@@ -433,8 +437,10 @@ function naManualLabelInputsChanged(){
 async function renderNewAuditTab(){
   await loadRequirements();
   const sel = document.getElementById('naDcmSelect');
-  const { data: dcms, error } = await sb.from('profiles').select('id,full_name,email')
+  let dcmQuery = sb.from('profiles').select('id,full_name,email')
     .eq('role','case_manager').eq('active', true).order('full_name');
+  if(isSupervisor()){ dcmQuery = dcmQuery.eq('supervisor_id', currentUser.id); }
+  const { data: dcms, error } = await dcmQuery;
   if(error){ console.error('load DCMs failed', error); alert('Could not load DCMs: '+error.message); return; }
   sel.innerHTML = '<option value="">Select a DCM…</option>' +
     (dcms||[]).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)}</option>`).join('');
@@ -624,7 +630,7 @@ function renderLogList(){
       if(a.edited_at){
         detail += `<div style="margin-top:10px;font-size:12px;color:var(--amber)">Edited by ${esc(logProfileNames[a.edited_by]||'someone')} — ${esc(a.edit_reason||'')}</div>`;
       }
-      if(!isVoided){
+      if(!isVoided && isAdmin()){
         detail += `<div style="display:flex;gap:8px;margin-top:12px" onclick="event.stopPropagation()">
           <button class="btn sm ghost" onclick="logStartEdit(${a.id})">Edit This Audit</button>
           <button class="btn sm red" onclick="logOpenVoidModal(${a.id})">Void This Audit</button>
@@ -713,8 +719,10 @@ async function logSaveEdit(){
 /* ---------- DASHBOARD ---------- */
 async function renderDashboardTab(){
   const wrap = document.getElementById('dashboardWrap');
-  const { data: dcms, error: dcmErr } = await sb.from('profiles').select('id,full_name,email')
+  let dcmQuery = sb.from('profiles').select('id,full_name,email')
     .eq('role','case_manager').eq('active', true).order('full_name');
+  if(isSupervisor()){ dcmQuery = dcmQuery.eq('supervisor_id', currentUser.id); }
+  const { data: dcms, error: dcmErr } = await dcmQuery;
   if(dcmErr){ console.error('load DCMs failed', dcmErr); alert('Could not load DCMs: '+dcmErr.message); return; }
   const { data: audits, error: auditErr } = await sb.from('dcm_audits').select('*').order('created_at',{ascending:false});
   if(auditErr){ console.error('load audits failed', auditErr); alert('Could not load audits: '+auditErr.message); return; }
