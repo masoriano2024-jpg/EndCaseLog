@@ -137,7 +137,7 @@
       <div class="mark">🛡️</div>
       <div>
         <h1>DCM <span>Compliance Audit</span></h1>
-        <div class="sub">Admin Only</div>
+        <div class="sub">Admin and Supervisors Only</div>
       </div>
     </div>
     <div style="text-align:right">
@@ -212,6 +212,21 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- VOID AUDIT MODAL -->
+<div class="modal-bg" id="voidModal">
+  <div class="modal">
+    <h3 style="font-family:'Poppins',sans-serif;font-weight:700;margin-bottom:14px">Void this audit</h3>
+    <input type="hidden" id="voidAuditId">
+    <label>Reason (required)</label>
+    <textarea id="voidReason" rows="3" placeholder="e.g. Entered against the wrong case"></textarea>
+    <div id="voidMsg" style="font-size:12px;font-weight:700;min-height:16px;margin-top:6px;color:var(--red)"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn ghost" onclick="document.getElementById('voidModal').classList.remove('show')">Cancel</button>
+      <button class="btn red" onclick="logSubmitVoid()">Void Audit</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -524,6 +539,7 @@ async function naSaveAudit(){
 
 /* ---------- AUDIT LOG ---------- */
 let logAudits = [], logProfileNames = {}, logExpanded = null;
+let logEditingId = null, logEditChecked = {}, logEditNotes = '', logEditCaseLabel = '';
 
 async function renderLogTab(){
   const { data: profs, error: profErr } = await sb.from('profiles').select('id,full_name,email,role');
@@ -534,6 +550,7 @@ async function renderLogTab(){
   const { data: audits, error } = await sb.from('dcm_audits').select('*').order('created_at',{ascending:false});
   if(error){ console.error('load audits failed', error); alert('Could not load audit log: '+error.message); return; }
   logAudits = audits || [];
+  logEditingId = null;
 
   const dcmIds = [...new Set(logAudits.map(a=>a.dcm_user_id))];
   const filterSel = document.getElementById('logDcmFilter');
@@ -543,13 +560,56 @@ async function renderLogTab(){
   renderLogList();
 }
 
+function logFindAudit(id){ return logAudits.find(a=>a.id===id); }
+
 function renderLogList(){
   const filter = document.getElementById('logDcmFilter').value;
   const wrap = document.getElementById('logListWrap');
   const rows = filter ? logAudits.filter(a=>a.dcm_user_id===filter) : logAudits;
   if(rows.length===0){ wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No audits recorded yet.</div>'; return; }
   wrap.innerHTML = rows.map(a=>{
+    const isVoided = !!a.voided_at;
+    const isEditing = logEditingId===a.id;
     const expanded = logExpanded===a.id;
+    const caseSuffix = a.case_label ? ` — ${esc(a.case_label)}` : '';
+
+    if(isEditing){
+      const grade = computeGrade(a.requirements_snapshot||[], logEditChecked);
+      const checklistHtml = (a.requirements_snapshot||[]).map(section=>`
+        <div style="margin-top:10px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--gray)">${esc(section.label)}</div>
+        ${sectionAllItems(section).map(item=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;cursor:pointer" onclick="logEditToggleItem('${item.id}')">
+            <input type="checkbox" style="width:auto" ${logEditChecked[item.id]?'checked':''} onclick="event.stopPropagation();logEditToggleItem('${item.id}')">
+            <span>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:10px;font-weight:700">CRITICAL</span>':''}</span>
+          </div>
+        `).join('')}</div>
+      `).join('');
+      return `<div class="card" onclick="event.stopPropagation()">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-family:'Poppins',sans-serif;font-weight:700">Editing — ${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}</div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:22px;color:${gradeColor(grade.pct)}">${grade.pct}%</div>
+        </div>
+        ${checklistHtml}
+        <div style="margin-top:10px">
+          <label>Client name (optional)</label>
+          <input type="text" id="logEditCaseLabelInput" value="${escAttr(logEditCaseLabel)}" oninput="logEditCaseLabel=this.value">
+        </div>
+        <div style="margin-top:10px">
+          <label>Notes (optional)</label>
+          <textarea id="logEditNotesInput" rows="2" oninput="logEditNotes=this.value">${esc(logEditNotes)}</textarea>
+        </div>
+        <div style="margin-top:10px">
+          <label>Reason for this edit (required)</label>
+          <textarea id="logEditReasonInput" rows="2" placeholder="e.g. Missed checking an item that was actually complete"></textarea>
+        </div>
+        <div id="logEditMsg" style="font-size:12px;font-weight:700;min-height:16px;margin-top:6px;color:var(--red)"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn ghost" onclick="logCancelEdit()">Cancel</button>
+          <button class="btn gold" onclick="logSaveEdit()">Save Changes</button>
+        </div>
+      </div>`;
+    }
+
     let detail = '';
     if(expanded){
       detail = (a.requirements_snapshot||[]).map(section=>`
@@ -561,13 +621,27 @@ function renderLogList(){
           </div>
         `).join('')}</div>
       `).join('');
+      if(a.edited_at){
+        detail += `<div style="margin-top:10px;font-size:12px;color:var(--amber)">Edited by ${esc(logProfileNames[a.edited_by]||'someone')} — ${esc(a.edit_reason||'')}</div>`;
+      }
+      if(!isVoided){
+        detail += `<div style="display:flex;gap:8px;margin-top:12px" onclick="event.stopPropagation()">
+          <button class="btn sm ghost" onclick="logStartEdit(${a.id})">Edit This Audit</button>
+          <button class="btn sm red" onclick="logOpenVoidModal(${a.id})">Void This Audit</button>
+        </div>`;
+      }
     }
-    const caseSuffix = a.case_label ? ` — ${esc(a.case_label)}` : '';
-    return `<div class="card" style="cursor:pointer" onclick="logToggleExpand(${a.id})">
+
+    const voidedBadge = isVoided
+      ? `<div style="margin-top:6px"><span style="font-size:11px;font-weight:700;background:var(--red);color:#fff;border-radius:3px;padding:2px 8px">VOIDED</span> <span style="color:var(--gray);font-size:12px">${esc(a.void_reason||'')}</span></div>`
+      : '';
+
+    return `<div class="card" style="cursor:pointer;${isVoided?'opacity:.55':''}" onclick="logToggleExpand(${a.id})">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}${caseSuffix}</div>
           <div style="color:var(--gray);font-size:12px">${fmt(a.created_at)}${a.notes?' · '+esc(a.notes):''}</div>
+          ${voidedBadge}
         </div>
         <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:22px;color:${gradeColor(a.grade)}">${a.grade}%</div>
       </div>
@@ -575,7 +649,66 @@ function renderLogList(){
     </div>`;
   }).join('');
 }
-function logToggleExpand(id){ logExpanded = (logExpanded===id) ? null : id; renderLogList(); }
+function logToggleExpand(id){ if(logEditingId===id) return; logExpanded = (logExpanded===id) ? null : id; renderLogList(); }
+
+function logOpenVoidModal(id){
+  document.getElementById('voidAuditId').value = id;
+  document.getElementById('voidReason').value = '';
+  document.getElementById('voidMsg').textContent = '';
+  document.getElementById('voidModal').classList.add('show');
+}
+async function logSubmitVoid(){
+  const id = parseInt(document.getElementById('voidAuditId').value, 10);
+  const reason = document.getElementById('voidReason').value.trim();
+  const msg = document.getElementById('voidMsg');
+  if(!reason){ msg.textContent = 'A reason is required.'; return; }
+  const { error } = await sb.from('dcm_audits').update({
+    voided_at: new Date().toISOString(), void_reason: reason, voided_by: currentUser.id
+  }).eq('id', id);
+  if(error){ msg.textContent = 'Void failed: '+error.message; return; }
+  const a = logFindAudit(id);
+  if(a){ a.voided_at = new Date().toISOString(); a.void_reason = reason; a.voided_by = currentUser.id; }
+  document.getElementById('voidModal').classList.remove('show');
+  renderLogList();
+}
+
+function logStartEdit(id){
+  const a = logFindAudit(id);
+  if(!a) return;
+  logEditingId = id;
+  logEditChecked = {...(a.checked||{})};
+  logEditNotes = a.notes || '';
+  logEditCaseLabel = a.case_label || '';
+  logExpanded = id;
+  renderLogList();
+}
+function logCancelEdit(){
+  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = '';
+  renderLogList();
+}
+function logEditToggleItem(itemId){
+  logEditChecked[itemId] = !logEditChecked[itemId];
+  renderLogList();
+}
+async function logSaveEdit(){
+  const a = logFindAudit(logEditingId);
+  if(!a) return;
+  const reason = document.getElementById('logEditReasonInput').value.trim();
+  const msg = document.getElementById('logEditMsg');
+  if(!reason){ msg.textContent = 'A reason is required.'; return; }
+  const grade = computeGrade(a.requirements_snapshot||[], logEditChecked);
+  const notes = (logEditNotes||'').trim() || null;
+  const caseLabel = (logEditCaseLabel||'').trim() || null;
+  const { error } = await sb.from('dcm_audits').update({
+    checked: logEditChecked, grade: grade.pct, notes, case_label: caseLabel,
+    edited_by: currentUser.id, edited_at: new Date().toISOString(), edit_reason: reason
+  }).eq('id', a.id);
+  if(error){ msg.textContent = 'Save failed: '+error.message; return; }
+  a.checked = {...logEditChecked}; a.grade = grade.pct; a.notes = notes; a.case_label = caseLabel;
+  a.edited_by = currentUser.id; a.edited_at = new Date().toISOString(); a.edit_reason = reason;
+  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = '';
+  renderLogList();
+}
 
 /* ---------- DASHBOARD ---------- */
 async function renderDashboardTab(){
@@ -589,7 +722,7 @@ async function renderDashboardTab(){
   if(!dcms || dcms.length===0){ wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No active DCMs found.</div>'; return; }
 
   wrap.innerHTML = dcms.map(dcm=>{
-    const theirs = (audits||[]).filter(a=>a.dcm_user_id===dcm.id);
+    const theirs = (audits||[]).filter(a=>a.dcm_user_id===dcm.id && !a.voided_at);
     if(theirs.length===0){
       return `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
         <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(dcm.full_name||dcm.email)}</div>
