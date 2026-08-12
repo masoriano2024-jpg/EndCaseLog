@@ -3719,6 +3719,8 @@ async function load(){
       if(pathCRows.length>0) PATH_C=pathCRows.map(r=>({t:r.label}));
     }
 
+    repairOutOfRangeSteps();
+
     cacheWrite();
     syncDone();
     renderAll();
@@ -3933,6 +3935,20 @@ function stepsFor(c){
     return PATH_C;
   }
   return OUTREACH;
+}
+// If an admin shortens the outreach/intake step template after a case has
+// already advanced past the new last step, that case's saved c.step points
+// past the end of the array and crashes every render that touches it
+// (Dashboard, Roster). Clamp and persist so it can't happen again.
+function repairOutOfRangeSteps(){
+  cases.forEach(c=>{
+    if(c.status!=='outreach'&&c.status!=='intake')return;
+    const steps=stepsFor(c);
+    if(steps.length&&c.step>=steps.length){
+      c.step=steps.length-1;
+      saveCase(c);
+    }
+  });
 }
 
 /* ---------- DATE HELPERS ---------- */
@@ -4153,12 +4169,16 @@ function caseWorkflowActionsHtml(c){
   if(c.status==='intake'){
     const steps=stepsFor(c);
     const total=steps.length;
-    const lastStep=c.step===total-1;
+    // c.step can be stale/out-of-range if an admin shortened the step template
+    // after this case had already advanced past the new last step — clamp so
+    // rendering never crashes (mirrors the ?.t||'' guard Path C already uses).
+    const stepIdx=Math.min(c.step,total-1);
+    const lastStep=stepIdx===total-1;
     return `
-      <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
-      <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+      <div class="case-step">Step ${stepIdx+1} of ${total}: <b>${steps[stepIdx]?.t||''}</b></div>
+      <div class="progress"><i style="width:${total>1?(stepIdx/(total-1))*100:0}%"></i></div>
       <div class="case-actions">
-        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
+        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${stepIdx===0?'disabled':''}>← Previous</button>
         <button class="btn sm gold" onclick="nextStep(${c.id})">${lastStep?'✓ Mark as Open Case':'Next Step →'}</button>
         ${!lastStep?`<button class="btn sm green" onclick="markOpen(${c.id})" title="Skip remaining intake steps">Mark as Open Case</button>`:''}
         <button class="btn sm ghost" onclick="reopenOutreach(${c.id})" title="Move back to outreach">← Back to Outreach</button>
@@ -4169,12 +4189,13 @@ function caseWorkflowActionsHtml(c){
   }
   if(c.status==='outreach'){
     const steps=stepsFor(c);const total=steps.length;
+    const stepIdx=Math.min(c.step,total-1);
     return `
-      <div class="case-step">Step ${c.step+1} of ${total}: <b>${steps[c.step].t}</b></div>
-      <div class="progress"><i style="width:${(c.step/(total-1))*100}%"></i></div>
+      <div class="case-step">Step ${stepIdx+1} of ${total}: <b>${steps[stepIdx]?.t||''}</b></div>
+      <div class="progress"><i style="width:${total>1?(stepIdx/(total-1))*100:0}%"></i></div>
       <div class="case-actions">
-        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${c.step===0?'disabled':''}>← Previous</button>
-        <button class="btn sm gold" onclick="nextStep(${c.id})" ${c.step===total-1?'disabled':''}>Next Step →</button>
+        <button class="btn sm ghost" onclick="prevStep(${c.id})" ${stepIdx===0?'disabled':''}>← Previous</button>
+        <button class="btn sm gold" onclick="nextStep(${c.id})" ${stepIdx===total-1?'disabled':''}>Next Step →</button>
         <button class="btn sm green" onclick="openDecide(${c.id})">Made Contact…</button>
         <span style="flex:1"></span>
         <button class="btn sm red" onclick="closeCase(${c.id},'closed')">Close (no contact)</button>
