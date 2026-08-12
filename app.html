@@ -3723,7 +3723,10 @@ async function load(){
     syncDone();
     renderAll();
   }catch(e){
-    syncErr('Load failed — using local cache');
+    // TEMP DIAGNOSTIC (2026-08-12): show the real error so we can see why one
+    // account's Load is failing, instead of the generic message. Revert once
+    // the cause is found — see feedback_deploy_ready_sync_workflow memory.
+    syncErr('Load failed — using local cache ('+(e && (e.message||e.code||JSON.stringify(e)))+')');
   }
 }
 
