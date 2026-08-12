@@ -182,6 +182,15 @@
       <div style="margin-top:-6px;margin-bottom:6px">
         <a href="#" onclick="naToggleManualMode();return false" id="naManualToggleLink" style="font-size:12px;color:var(--blue-light)">Case not in the system? Enter manually</a>
       </div>
+      <div id="naCaseTypeWrap" class="card" style="display:none">
+        <label>Case Type</label>
+        <select id="naCaseTypeSelect" onchange="naCaseTypeChanged()">
+          <option value="">Select a case type…</option>
+          <option value="open">Open</option>
+          <option value="closed_pre_open">Closed Pre-Open (No Contact)</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
       <div id="naChecklistWrap"></div>
     </section>
 
@@ -198,6 +207,7 @@
     <section class="panel" id="requirements">
       <h2 class="sec">Compliance Requirements</h2>
       <p class="sec-note">Edit the checklist used for new audits. Changes here do not affect audits already saved.</p>
+      <div id="reqTypeTabs" style="display:flex;gap:8px;margin-bottom:12px"></div>
       <div class="card">
         <label>New Section Name</label>
         <div style="display:flex;gap:8px">
@@ -309,23 +319,45 @@ function computeGrade(checklist, checked){
 function gradeColor(pct){ return pct>=85?'var(--green)':pct>=60?'var(--amber)':'var(--red)'; }
 
 /* ---------- REQUIREMENTS EDITOR ---------- */
-let reqChecklist = [];
+const REQ_TYPES = ['open','closed_pre_open','closed'];
+const REQ_TYPE_LABELS = { open:'Open', closed_pre_open:'Closed Pre-Open (No Contact)', closed:'Closed' };
+let reqChecklist = { open:[], closed_pre_open:[], closed:[] };
+let currentReqType = 'open';
 
 async function loadRequirements(){
   const { data, error } = await sb.from('audit_requirements').select('*').order('updated_at',{ascending:false}).limit(1);
-  if(error){ console.error('loadRequirements failed', error); reqChecklist = []; return; }
-  reqChecklist = (data && data[0] && data[0].checklist) ? data[0].checklist : [];
+  if(error){ console.error('loadRequirements failed', error); reqChecklist = { open:[], closed_pre_open:[], closed:[] }; return; }
+  const raw = (data && data[0] && data[0].checklist) ? data[0].checklist : [];
+  if(Array.isArray(raw)){
+    reqChecklist = {
+      open: raw,
+      closed_pre_open: JSON.parse(JSON.stringify(raw)),
+      closed: JSON.parse(JSON.stringify(raw))
+    };
+  } else {
+    reqChecklist = {
+      open: raw.open || [],
+      closed_pre_open: raw.closed_pre_open || [],
+      closed: raw.closed || []
+    };
+  }
 }
 
 function reqNewId(prefix){ return prefix+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); }
 
 function renderRequirementsTab(){
+  const tabsWrap = document.getElementById('reqTypeTabs');
+  tabsWrap.innerHTML = REQ_TYPES.map(t=>
+    `<button class="btn sm ${t===currentReqType?'':'ghost'}" onclick="reqSwitchType('${t}')">${esc(REQ_TYPE_LABELS[t])}</button>`
+  ).join('');
+
   const wrap = document.getElementById('reqSectionsWrap');
-  if(reqChecklist.length===0){
-    wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No requirements yet. Add a section above to get started.</div>';
+  const list = reqChecklist[currentReqType];
+  if(list.length===0){
+    wrap.innerHTML = '<div class="card" style="color:var(--gray-light)">No requirements yet for this case type. Add a section above to get started.</div>';
     return;
   }
-  wrap.innerHTML = reqChecklist.map((section,sIdx)=>`
+  wrap.innerHTML = list.map((section,sIdx)=>`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.4px">${esc(section.label)}</div>
@@ -355,17 +387,21 @@ function renderRequirementsTab(){
   `).join('');
 }
 
+function reqSwitchType(type){
+  currentReqType = type;
+  renderRequirementsTab();
+}
 function reqAddSection(){
   const input = document.getElementById('reqNewSectionInput');
   const label = input.value.trim();
   if(!label) return;
-  reqChecklist.push({ id: reqNewId('sec'), label, items: [] });
+  reqChecklist[currentReqType].push({ id: reqNewId('sec'), label, items: [] });
   input.value = '';
   renderRequirementsTab();
 }
 function reqDeleteSection(sIdx){
   if(!confirm('Delete this section and all its items?')) return;
-  reqChecklist.splice(sIdx,1);
+  reqChecklist[currentReqType].splice(sIdx,1);
   renderRequirementsTab();
 }
 function reqAddItem(sIdx){
@@ -373,19 +409,19 @@ function reqAddItem(sIdx){
   const noteInput = document.getElementById('reqItemNote_'+sIdx);
   const text = textInput.value.trim();
   if(!text) return;
-  reqChecklist[sIdx].items.push({ id: reqNewId('item'), text, note: noteInput.value.trim()||undefined, critical: false });
+  reqChecklist[currentReqType][sIdx].items.push({ id: reqNewId('item'), text, note: noteInput.value.trim()||undefined, critical: false });
   renderRequirementsTab();
 }
 function reqDeleteItem(sIdx,iIdx){
-  reqChecklist[sIdx].items.splice(iIdx,1);
+  reqChecklist[currentReqType][sIdx].items.splice(iIdx,1);
   renderRequirementsTab();
 }
 function reqToggleCritical(sIdx,iIdx){
-  reqChecklist[sIdx].items[iIdx].critical = !reqChecklist[sIdx].items[iIdx].critical;
+  reqChecklist[currentReqType][sIdx].items[iIdx].critical = !reqChecklist[currentReqType][sIdx].items[iIdx].critical;
   renderRequirementsTab();
 }
 function reqMoveItem(sIdx,iIdx,dir){
-  const items = reqChecklist[sIdx].items;
+  const items = reqChecklist[currentReqType][sIdx].items;
   const target = iIdx+dir;
   if(target<0 || target>=items.length) return;
   [items[iIdx], items[target]] = [items[target], items[iIdx]];
@@ -410,6 +446,13 @@ async function reqSaveAll(){
 /* ---------- NEW AUDIT ---------- */
 let naDcmId = null, naCaseId = null, naRosterMap = {}, naChecked = {}, naNotesText = '', naSaving = false;
 let naManualMode = false, naManualLabel = '';
+let naCaseType = null, naSectionNotes = {};
+
+function naCaseTypeChanged(){
+  naCaseType = document.getElementById('naCaseTypeSelect').value || null;
+  naChecked = {}; naNotesText = ''; naSectionNotes = {};
+  renderNAChecklist();
+}
 
 function naToggleManualMode(){
   naManualMode = !naManualMode;
@@ -420,13 +463,18 @@ function naToggleManualMode(){
   document.getElementById('naManualCaseIdInput').value = '';
   document.getElementById('naManualLabelInput').value = '';
   naCaseId = null; naManualLabel = ''; naChecked = {}; naNotesText = '';
+  naCaseType = null; naSectionNotes = {};
+  document.getElementById('naCaseTypeSelect').value = '';
+  document.getElementById('naCaseTypeWrap').style.display = 'none';
   document.getElementById('naChecklistWrap').innerHTML = '';
 }
 
 function naManualInputsChanged(){
   const raw = document.getElementById('naManualCaseIdInput').value;
   naCaseId = raw ? parseInt(raw, 10) : null;
-  naChecked = {}; naNotesText = '';
+  naChecked = {}; naNotesText = ''; naSectionNotes = {}; naCaseType = null;
+  document.getElementById('naCaseTypeSelect').value = '';
+  document.getElementById('naCaseTypeWrap').style.display = naCaseId ? '' : 'none';
   renderNAChecklist();
 }
 function naManualLabelInputsChanged(){
@@ -449,6 +497,9 @@ async function renderNewAuditTab(){
   document.getElementById('naChecklistWrap').innerHTML = '';
   naDcmId = null; naCaseId = null; naChecked = {}; naNotesText = '';
   naManualMode = false; naManualLabel = '';
+  naCaseType = null; naSectionNotes = {};
+  document.getElementById('naCaseTypeSelect').value = '';
+  document.getElementById('naCaseTypeWrap').style.display = 'none';
   document.getElementById('naCaseDropdownWrap').style.display = '';
   document.getElementById('naCaseManualWrap').style.display = 'none';
   document.getElementById('naManualToggleLink').textContent = 'Case not in the system? Enter manually';
@@ -457,6 +508,9 @@ async function renderNewAuditTab(){
 async function naDcmChanged(){
   naDcmId = document.getElementById('naDcmSelect').value || null;
   naCaseId = null; naChecked = {}; naNotesText = '';
+  naCaseType = null; naSectionNotes = {};
+  document.getElementById('naCaseTypeSelect').value = '';
+  document.getElementById('naCaseTypeWrap').style.display = 'none';
   if(naManualMode){ naToggleManualMode(); }
   document.getElementById('naChecklistWrap').innerHTML = '';
   const caseSel = document.getElementById('naCaseSelect');
@@ -477,25 +531,28 @@ async function naDcmChanged(){
 
 function naCaseChanged(){
   naCaseId = document.getElementById('naCaseSelect').value ? parseInt(document.getElementById('naCaseSelect').value,10) : null;
-  naChecked = {}; naNotesText = '';
+  naChecked = {}; naNotesText = ''; naSectionNotes = {}; naCaseType = null;
+  document.getElementById('naCaseTypeSelect').value = '';
+  document.getElementById('naCaseTypeWrap').style.display = naCaseId ? '' : 'none';
   renderNAChecklist();
 }
 
 function renderNAChecklist(){
   const wrap = document.getElementById('naChecklistWrap');
-  if(!naCaseId){ wrap.innerHTML=''; return; }
-  const grade = computeGrade(reqChecklist, naChecked);
+  if(!naCaseId || !naCaseType){ wrap.innerHTML=''; return; }
+  const checklist = reqChecklist[naCaseType];
+  const grade = computeGrade(checklist, naChecked);
   const caseTitle = naManualMode
     ? `Case #${naCaseId}${naManualLabel.trim()?' — '+esc(naManualLabel.trim()):''}`
     : `Case #${naCaseId} — ${esc(naRosterMap[naCaseId]||'Unnamed')}`;
   let html = `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
-    <div style="font-family:'Poppins',sans-serif;font-weight:700">${caseTitle}</div>
+    <div style="font-family:'Poppins',sans-serif;font-weight:700">${caseTitle} <span style="color:var(--gray);font-weight:400;font-size:13px">— ${esc(REQ_TYPE_LABELS[naCaseType])}</span></div>
     <div style="text-align:right">
       <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:28px;color:${gradeColor(grade.pct)}">${grade.pct}%</div>
       <div style="color:var(--gray);font-size:12px">${grade.done} of ${grade.total} complete${grade.criticalMissed?' · critical item missing':''}</div>
     </div>
   </div>`;
-  reqChecklist.forEach(section=>{
+  checklist.forEach(section=>{
     html += `<div class="card"><div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">${esc(section.label)}</div>`;
     sectionAllItems(section).forEach(item=>{
       const checked = !!naChecked[item.id];
@@ -504,6 +561,10 @@ function renderNAChecklist(){
         <div>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:11px;font-weight:700">CRITICAL</span>':''}${item.note?`<div style="color:var(--gray-light);font-size:12px">${esc(item.note)}</div>`:''}</div>
       </div>`;
     });
+    html += `<div style="margin-top:8px">
+      <label style="font-size:11px;color:var(--gray)">Section notes</label>
+      <textarea id="naSectionNotes_${section.id}" rows="2" placeholder="Observations about this section" oninput="naSectionNotes['${section.id}']=this.value">${esc(naSectionNotes[section.id]||'')}</textarea>
+    </div>`;
     html += `</div>`;
   });
   html += `<div class="card">
@@ -521,20 +582,29 @@ function naToggle(itemId){ naChecked[itemId] = !naChecked[itemId]; renderNACheck
 async function naSaveAudit(){
   if(naSaving) return;
   if(!naDcmId || !naCaseId){ alert('Select a DCM and case first.'); return; }
-  if(!reqChecklist || reqChecklist.length===0){ alert('Requirements could not be loaded — reload the page before running an audit.'); return; }
+  if(!naCaseType){ alert('Select a case type first.'); return; }
+  const checklist = reqChecklist[naCaseType];
+  if(!checklist || checklist.length===0){ alert('Requirements could not be loaded — reload the page before running an audit.'); return; }
   naSaving = true;
   try {
-    const grade = computeGrade(reqChecklist, naChecked);
+    const grade = computeGrade(checklist, naChecked);
     const notes = (naNotesText||'').trim() || null;
     const caseLabel = naManualMode ? ((naManualLabel||'').trim() || null) : null;
+    const sectionNotes = {};
+    Object.keys(naSectionNotes).forEach(sid=>{
+      const v = (naSectionNotes[sid]||'').trim();
+      if(v) sectionNotes[sid] = v;
+    });
     const { error } = await sb.from('dcm_audits').insert({
       dcm_user_id: naDcmId, case_id: naCaseId, admin_user_id: currentUser.id,
-      requirements_snapshot: reqChecklist, checked: naChecked, grade: grade.pct, notes,
-      case_label: caseLabel
+      requirements_snapshot: checklist, checked: naChecked, grade: grade.pct, notes,
+      case_label: caseLabel, case_type: naCaseType,
+      section_notes: Object.keys(sectionNotes).length ? sectionNotes : null
     });
     if(error){ alert('Save failed: '+error.message); return; }
     naChecked = {};
     naNotesText = '';
+    naSectionNotes = {};
     renderNAChecklist();
     const fl = document.getElementById('naSaveFlash');
     if(fl){ fl.classList.add('show'); setTimeout(()=>fl.classList.remove('show'), 2000); }
@@ -545,7 +615,7 @@ async function naSaveAudit(){
 
 /* ---------- AUDIT LOG ---------- */
 let logAudits = [], logProfileNames = {}, logExpanded = null;
-let logEditingId = null, logEditChecked = {}, logEditNotes = '', logEditCaseLabel = '';
+let logEditingId = null, logEditChecked = {}, logEditNotes = '', logEditCaseLabel = '', logEditSectionNotes = {};
 
 async function renderLogTab(){
   const { data: profs, error: profErr } = await sb.from('profiles').select('id,full_name,email,role');
@@ -581,6 +651,7 @@ function renderLogList(){
 
     if(isEditing){
       const grade = computeGrade(a.requirements_snapshot||[], logEditChecked);
+      const editCaseTypeSuffix = a.case_type ? ` — ${esc(REQ_TYPE_LABELS[a.case_type]||a.case_type)}` : '';
       const checklistHtml = (a.requirements_snapshot||[]).map(section=>`
         <div style="margin-top:10px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--gray)">${esc(section.label)}</div>
         ${sectionAllItems(section).map(item=>`
@@ -588,11 +659,16 @@ function renderLogList(){
             <input type="checkbox" style="width:auto" ${logEditChecked[item.id]?'checked':''} onclick="event.stopPropagation();logEditToggleItem('${item.id}')">
             <span>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:10px;font-weight:700">CRITICAL</span>':''}</span>
           </div>
-        `).join('')}</div>
+        `).join('')}
+        <div style="margin-top:6px">
+          <label style="font-size:11px;color:var(--gray)">Section notes</label>
+          <textarea rows="2" style="font-size:12px" oninput="logEditSectionNotes['${section.id}']=this.value">${esc(logEditSectionNotes[section.id]||'')}</textarea>
+        </div>
+        </div>
       `).join('');
       return `<div class="card" onclick="event.stopPropagation()">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-family:'Poppins',sans-serif;font-weight:700">Editing — ${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}</div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:700">Editing — ${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}${editCaseTypeSuffix}</div>
           <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:22px;color:${gradeColor(grade.pct)}">${grade.pct}%</div>
         </div>
         ${checklistHtml}
@@ -625,7 +701,9 @@ function renderLogList(){
             <span>${a.checked && a.checked[item.id] ? '✅' : '❌'}</span>
             <span>${esc(item.text)}${item.critical?' <span style="color:var(--red);font-size:10px;font-weight:700">CRITICAL</span>':''}</span>
           </div>
-        `).join('')}</div>
+        `).join('')}
+        ${a.section_notes && a.section_notes[section.id] ? `<div style="margin-top:4px;color:var(--gray-light);font-size:12px">${esc(a.section_notes[section.id])}</div>` : ''}
+        </div>
       `).join('');
       if(a.edited_at){
         detail += `<div style="margin-top:10px;font-size:12px;color:var(--amber)">Edited by ${esc(logProfileNames[a.edited_by]||'someone')} — ${esc(a.edit_reason||'')}</div>`;
@@ -641,11 +719,12 @@ function renderLogList(){
     const voidedBadge = isVoided
       ? `<div style="margin-top:6px"><span style="font-size:11px;font-weight:700;background:var(--red);color:#fff;border-radius:3px;padding:2px 8px">VOIDED</span> <span style="color:var(--gray);font-size:12px">${esc(a.void_reason||'')}</span></div>`
       : '';
+    const caseTypeSuffix = a.case_type ? ` — ${esc(REQ_TYPE_LABELS[a.case_type]||a.case_type)}` : '';
 
     return `<div class="card" style="cursor:pointer;${isVoided?'opacity:.55':''}" onclick="logToggleExpand(${a.id})">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}${caseSuffix}</div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:700">${esc(logProfileNames[a.dcm_user_id]||'Unknown DCM')} — Case #${a.case_id}${caseSuffix}${caseTypeSuffix}</div>
           <div style="color:var(--gray);font-size:12px">${fmt(a.created_at)}${a.notes?' · '+esc(a.notes):''}</div>
           ${voidedBadge}
         </div>
@@ -685,11 +764,12 @@ function logStartEdit(id){
   logEditChecked = {...(a.checked||{})};
   logEditNotes = a.notes || '';
   logEditCaseLabel = a.case_label || '';
+  logEditSectionNotes = {...(a.section_notes||{})};
   logExpanded = id;
   renderLogList();
 }
 function logCancelEdit(){
-  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = '';
+  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = ''; logEditSectionNotes = {};
   renderLogList();
 }
 function logEditToggleItem(itemId){
@@ -705,14 +785,20 @@ async function logSaveEdit(){
   const grade = computeGrade(a.requirements_snapshot||[], logEditChecked);
   const notes = (logEditNotes||'').trim() || null;
   const caseLabel = (logEditCaseLabel||'').trim() || null;
+  const sectionNotes = {};
+  Object.keys(logEditSectionNotes).forEach(sid=>{
+    const v = (logEditSectionNotes[sid]||'').trim();
+    if(v) sectionNotes[sid] = v;
+  });
+  const sectionNotesToSave = Object.keys(sectionNotes).length ? sectionNotes : null;
   const { error } = await sb.from('dcm_audits').update({
-    checked: logEditChecked, grade: grade.pct, notes, case_label: caseLabel,
+    checked: logEditChecked, grade: grade.pct, notes, case_label: caseLabel, section_notes: sectionNotesToSave,
     edited_by: currentUser.id, edited_at: new Date().toISOString(), edit_reason: reason
   }).eq('id', a.id);
   if(error){ msg.textContent = 'Save failed: '+error.message; return; }
-  a.checked = {...logEditChecked}; a.grade = grade.pct; a.notes = notes; a.case_label = caseLabel;
+  a.checked = {...logEditChecked}; a.grade = grade.pct; a.notes = notes; a.case_label = caseLabel; a.section_notes = sectionNotesToSave;
   a.edited_by = currentUser.id; a.edited_at = new Date().toISOString(); a.edit_reason = reason;
-  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = '';
+  logEditingId = null; logEditChecked = {}; logEditNotes = ''; logEditCaseLabel = ''; logEditSectionNotes = {};
   renderLogList();
 }
 
