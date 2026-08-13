@@ -2514,7 +2514,7 @@ async function renderTeamOverview(scope){
     const weekAgo = addDays(todayISO(),-6);
     const stats = [];
     let officeCases = [];
-    let officeLogs = [];
+    let officeAuthoredLogs = [];
     for(const u of cmList){
       const { data: cs } = await sb.from('cases').select('*').eq('user_id', u.id);
       const allCases = cs || [];
@@ -2524,18 +2524,13 @@ async function renderTeamOverview(scope){
         if(c.status!=='outreach') return false;
         return dueDateFor(c,c.step) < todayISO();
       });
-      const idList = allCases.map(c=>c.id);
-      // Office-wide activity totals stay CASE-based (they measure the office's
-      // cases, not a person), so fetch office logs by case_id separately.
-      if(idList.length>0){
-        const { data: allLogsData } = await sb.from('contact_logs').select('*').in('case_id', idList);
-        officeLogs = officeLogs.concat(allLogsData || []);
-      }
       // Contact CREDIT follows the author, not the case owner — a DCM keeps credit for
-      // contacts they logged even after the case is transferred away.
+      // contacts they logged even after the case is transferred away. All office-wide
+      // activity totals below are built from this same author-based log set.
       let contactsThisWeek = 0, madeContact = 0, totalAttempts = 0;
       const { data: authoredLogs } = await sb.from('contact_logs').select('*').eq('logged_by', u.id);
       const myLogs = authoredLogs || [];
+      officeAuthoredLogs = officeAuthoredLogs.concat(myLogs);
       contactsThisWeek = myLogs.filter(l=>l.date>=weekAgo).length;
       totalAttempts = myLogs.length;
       madeContact = myLogs.filter(l=>l.result==='Made contact').length;
@@ -2544,16 +2539,18 @@ async function renderTeamOverview(scope){
 
     teamCurrentView = mode==='supervisor' ? { type:'supervisor_team' } : { type:'office', office };
 
-    // office-wide aggregates, scoped to the selected date range
+    // Office-wide aggregates, scoped to the selected date range. Contact CREDIT
+    // follows the author, not the case owner, so these are all built from
+    // officeAuthoredLogs — every log credited to a DCM on this team/office.
     const days = getTeamDays();
-    const rangeLogsOffice = officeLogs.filter(l=>days.includes(l.date));
+    const rangeLogsOffice = officeAuthoredLogs.filter(l=>days.includes(l.date));
     const totalAttemptsOffice = rangeLogsOffice.length;
     const madeContactOffice = rangeLogsOffice.filter(l=>l.result==='Made contact').length;
     const noAnswerOffice = rangeLogsOffice.filter(l=>l.result==='No answer').length;
     const leftMessageOffice = rangeLogsOffice.filter(l=>l.result==='Left message').length;
     const successRateOffice = totalAttemptsOffice>0 ? Math.round((madeContactOffice/totalAttemptsOffice)*100) : 0;
 
-    const dailyCounts = days.map(d=>officeLogs.filter(l=>l.date===d).length);
+    const dailyCounts = days.map(d=>officeAuthoredLogs.filter(l=>l.date===d).length);
 
     const statusCounts = {};
     officeCases.forEach(c=>{ statusCounts[c.status] = (statusCounts[c.status]||0)+1; });
@@ -4418,36 +4415,38 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
     } else if(filterType === 'log_result'){
       const start = teamRangeStart || null;
       const end   = teamRangeEnd   || null;
-      // contact_logs rows carry no user_id, so scope through the parent case
-      // (office and supervisor team), the same way the card counts are computed.
-      let scopedCaseIds = null;
+      // Contact CREDIT follows the author, not the case owner — scope by whoever
+      // logged the contact (office roster / supervisor team), same author-based
+      // rule the card counts above now use, not the case's current office/owner.
+      let authorIds = null;
       if(scopeOffice || supervisorTeamIds){
-        let caseQ = sb.from('cases').select('id');
-        if(scopeOffice) caseQ = caseQ.eq('office', scopeOffice);
-        if(supervisorTeamIds) caseQ = caseQ.in('user_id', supervisorTeamIds);
-        const { data: sc, error: scErr } = await caseQ;
-        if(scErr) throw scErr;
-        scopedCaseIds = (sc||[]).map(c=>c.id);
-        if(scopedCaseIds.length === 0){ rows = []; }
+        if(supervisorTeamIds){
+          authorIds = supervisorTeamIds;
+        } else {
+          const { data: officeUsers, error: ouErr } = await sb.from('profiles').select('id').eq('office', scopeOffice).eq('active', true);
+          if(ouErr) throw ouErr;
+          authorIds = (officeUsers||[]).map(u=>u.id);
+        }
+        if(authorIds.length === 0){ rows = []; }
       }
-      if(scopedCaseIds && scopedCaseIds.length === 0){
+      if(authorIds && authorIds.length === 0){
         rows = [];
       } else {
-        let q = sb.from('contact_logs').select('case_id,date,result');
+        let q = sb.from('contact_logs').select('case_id,date,result,logged_by');
         if(filterValue) q = q.eq('result', filterValue);   // null => "Attempts" (all results)
-        if(scopedCaseIds) q = q.in('case_id', scopedCaseIds);
+        if(authorIds) q = q.in('logged_by', authorIds);
         if(start) q = q.gte('date', start);
         if(end)   q = q.lte('date', end);
         const { data: lRows, error: lErr } = await q.order('date',{ascending:false});
         if(lErr) throw lErr;
         const caseIds = [...new Set((lRows||[]).map(l=>l.case_id))];
-        let caseOfficeMap = {}, caseCmMap = {};
+        let caseOfficeMap = {};
         if(caseIds.length > 0){
-          const { data: caseRows } = await sb.from('cases').select('id,office,user_id').in('id', caseIds);
-          (caseRows||[]).forEach(c=>{ caseOfficeMap[c.id] = c.office; caseCmMap[c.id] = c.user_id; });
+          const { data: caseRows } = await sb.from('cases').select('id,office').in('id', caseIds);
+          (caseRows||[]).forEach(c=>{ caseOfficeMap[c.id] = c.office; });
         }
         rows = (lRows||[])
-          .map(l=>({ id:l.case_id, cmName:cmNameById[caseCmMap[l.case_id]]||'', office:caseOfficeMap[l.case_id]||'', status:'log', tier:null, detail:l.result+' on '+l.date }));
+          .map(l=>({ id:l.case_id, cmName:cmNameById[l.logged_by]||'', office:caseOfficeMap[l.case_id]||'', status:'log', tier:null, detail:l.result+' on '+l.date }));
       }
 
     } else if(filterType === 'closed_before' || filterType === 'closed_after'){
