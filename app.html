@@ -305,6 +305,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -947,6 +948,20 @@
 </div>
 
 <script>
+/* ---------- CHART.JS DATALABELS ---------- */
+// Registered globally but off by default (Chart.defaults.plugins.datalabels.display)
+// so it doesn't touch doughnuts/lines — each bar chart turns it on explicitly.
+Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels', {
+  display: false,
+  anchor: 'end',
+  align: 'top',
+  offset: 2,
+  font: { family:'Poppins', size:10, weight:'700' },
+  color: '#1B2A4A',
+  formatter: (v) => v ? v : ''
+});
+
 /* ---------- SUPABASE INIT ---------- */
 const SUPABASE_URL = 'https://gsqstjkyuyztvglutuvk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzcXN0amt5dXl6dHZnbHV0dXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDg1NzUsImV4cCI6MjA5NzEyNDU3NX0.p9mHM3Ervz7Z5qezqDGUiSrb-u6JqKqLJSEEE8EyAio';
@@ -2372,7 +2387,7 @@ async function renderOfficeOverview(){
       },
       options: {
         responsive: true,
-        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — All Offices — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — All Offices — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -2450,7 +2465,7 @@ async function renderOfficeOverview(){
       },
       options: {
         responsive: true,
-        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+        plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -2691,7 +2706,7 @@ async function renderTeamOverview(scope){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -2769,7 +2784,7 @@ async function renderTeamOverview(scope){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${esc(chartTitleSuffix)} — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -3447,7 +3462,7 @@ async function drillIntoUser(userId, userName, office, mode){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Case Status Activity — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
@@ -3525,7 +3540,7 @@ async function drillIntoUser(userId, userName, office, mode){
         },
         options: {
           responsive: true,
-          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' } },
+          plugins: { legend: { position:'bottom' }, title: { display: true, text: `Contact Attempts: Survivors vs Clients — ${teamRangeLabel()}`, font:{family:'Poppins',size:13,weight:'bold'}, color:'#1B2A4A' }, datalabels: { display:true } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
       });
