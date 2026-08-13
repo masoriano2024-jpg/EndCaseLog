@@ -2512,6 +2512,7 @@ async function renderTeamOverview(scope){
     }
 
     const weekAgo = addDays(todayISO(),-6);
+    const days = getTeamDays();
     const stats = [];
     let officeCases = [];
     let officeAuthoredLogs = [];
@@ -2531,9 +2532,12 @@ async function renderTeamOverview(scope){
       const { data: authoredLogs } = await sb.from('contact_logs').select('*').eq('logged_by', u.id);
       const myLogs = authoredLogs || [];
       officeAuthoredLogs = officeAuthoredLogs.concat(myLogs);
+      // "This Week" stays a fixed trailing-7-days glance, independent of the picker above.
+      // Total attempts / made contact / success rate scope to the selected date range.
+      const myRangeLogs = myLogs.filter(l=>days.includes(l.date));
       contactsThisWeek = myLogs.filter(l=>l.date>=weekAgo).length;
-      totalAttempts = myLogs.length;
-      madeContact = myLogs.filter(l=>l.result==='Made contact').length;
+      totalAttempts = myRangeLogs.length;
+      madeContact = myRangeLogs.filter(l=>l.result==='Made contact').length;
       stats.push({ user:u, active:active.length, overdue:overdue.length, contactsWeek:contactsThisWeek, totalAttempts, madeContact });
     }
 
@@ -2542,7 +2546,6 @@ async function renderTeamOverview(scope){
     // Office-wide aggregates, scoped to the selected date range. Contact CREDIT
     // follows the author, not the case owner, so these are all built from
     // officeAuthoredLogs — every log credited to a DCM on this team/office.
-    const days = getTeamDays();
     const rangeLogsOffice = officeAuthoredLogs.filter(l=>days.includes(l.date));
     const totalAttemptsOffice = rangeLogsOffice.length;
     const madeContactOffice = rangeLogsOffice.filter(l=>l.result==='Made contact').length;
@@ -3277,14 +3280,12 @@ async function drillIntoUser(userId, userName, office, mode){
       flaggedBy:r.flagged_by||null, flaggedAt:r.flagged_at||null,
       tier:r.tier||null, pathCStep:r.path_c_step||0, closedFromStatus:r.closed_from_status||null
     }));
-    const idList = allCases.map(c=>c.id);
     teamDrillUserCases = allCases;
 
-    let allLogs = [];
-    if(idList.length>0){
-      const { data: logsData } = await sb.from('contact_logs').select('*').in('case_id', idList).order('date',{ascending:true});
-      allLogs = logsData || [];
-    }
+    // Contact CREDIT follows the author, not the case owner — a DCM keeps credit
+    // for contacts they logged even after the case is transferred away.
+    const { data: logsData } = await sb.from('contact_logs').select('*').eq('logged_by', userId).order('date',{ascending:true});
+    const allLogs = logsData || [];
 
     const days = getTeamDays();
     const rangeLogs = allLogs.filter(l=>days.includes(l.date));
@@ -3342,27 +3343,27 @@ async function drillIntoUser(userId, userName, office, mode){
       ${dateRangeControlsHtml()}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Attempts (Range)', totalAttempts, 'var(--navy)', "statDrill('log_result',null,'Attempts',null)")}
-        ${miniStat('Made Contact', madeContact, 'var(--green)', "statDrill('log_result','Made contact','Made Contact',null)")}
-        ${miniStat('No Answer', noAnswer, 'var(--red)', "statDrill('log_result','No answer','No Answer',null)")}
-        ${miniStat('Left Message', leftMessage, 'var(--amber)', "statDrill('log_result','Left message','Left Message',null)")}
+        ${miniStat('Attempts (Range)', totalAttempts, 'var(--navy)', `statDrill('log_result',null,'Attempts',null,'${userId}')`)}
+        ${miniStat('Made Contact', madeContact, 'var(--green)', `statDrill('log_result','Made contact','Made Contact',null,'${userId}')`)}
+        ${miniStat('No Answer', noAnswer, 'var(--red)', `statDrill('log_result','No answer','No Answer',null,'${userId}')`)}
+        ${miniStat('Left Message', leftMessage, 'var(--amber)', `statDrill('log_result','Left message','Left Message',null,'${userId}')`)}
         ${miniStat('Success Rate', successRate+'%', 'var(--blue)')}
-        ${miniStat('Total Caseload', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)', "statDrill('caseload',null,'Total Caseload',null)")}
+        ${miniStat('Total Caseload', allCases.filter(c=>['outreach','intake','open'].includes(c.status)).length, 'var(--navy)', `statDrill('caseload',null,'Total Caseload',null,'${userId}')`)}
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', "statDrill('status','outreach','Pre-Opened — My Team',null)")}
-        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', "statDrill('status','intake','Pending — My Team',null)")}
-        ${miniStat('Open', statusCounts.open||0, 'var(--green)', "statDrill('status','open','Open — My Team',null)")}
-        ${miniStat('Closed (All Time)', closedAllTeam, 'var(--red)', "statDrill('closed_all',null,'Closed Cases',null)")}
+        ${miniStat('Pre-Opened', statusCounts.outreach||0, 'var(--amber)', `statDrill('status','outreach','Pre-Opened — My Team',null,'${userId}')`)}
+        ${miniStat('Pending', statusCounts.intake||0, 'var(--blue)', `statDrill('status','intake','Pending — My Team',null,'${userId}')`)}
+        ${miniStat('Open', statusCounts.open||0, 'var(--green)', `statDrill('status','open','Open — My Team',null,'${userId}')`)}
+        ${miniStat('Closed (All Time)', closedAllTeam, 'var(--red)', `statDrill('closed_all',null,'Closed Cases',null,'${userId}')`)}
       </div>
 
       ${activeCases.length > 0 ? `
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:16px 20px;margin-bottom:20px">
         <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:13px;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px">Path C — Recovery Plan Progress</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          ${miniStat('Open Cases', activeCases.length, 'var(--navy)', "statDrill('status','open','Open Cases',null)")}
-          ${miniStat('Path C Complete', pathCComplete, 'var(--green)', "statDrill('path_c_complete',null,'Path C Complete — My Team',null)")}
+          ${miniStat('Open Cases', activeCases.length, 'var(--navy)', `statDrill('status','open','Open Cases',null,'${userId}')`)}
+          ${miniStat('Path C Complete', pathCComplete, 'var(--green)', `statDrill('path_c_complete',null,'Path C Complete — My Team',null,'${userId}')`)}
           ${miniStat('Recovery Plan %', pathCPct+'%', pathCPct===100?'var(--green)':pathCPct>50?'var(--blue)':'var(--amber)')}
         </div>
       </div>
@@ -3378,8 +3379,8 @@ async function drillIntoUser(userId, userName, office, mode){
       </div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px">
-        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)', "statDrill('closed_before',null,'Closed Before Intake Done',null)")}
-        ${miniStat('Closed After Intake Done (Range)', closedAfterActive, 'var(--green)', "statDrill('closed_after',null,'Closed After Intake Done',null)")}
+        ${miniStat('Closed Before Intake Done (Range)', closedBeforeActive, 'var(--red)', `statDrill('closed_before',null,'Closed Before Intake Done',null,'${userId}')`)}
+        ${miniStat('Closed After Intake Done (Range)', closedAfterActive, 'var(--green)', `statDrill('closed_after',null,'Closed After Intake Done',null,'${userId}')`)}
       </div>
 
       <div style="background:var(--white);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-card);padding:20px;margin-bottom:20px">
@@ -4367,7 +4368,7 @@ function markOpen(id){
   triggerTierPicker(id);
 }
 /* ---------- STAT CARD DRILL-DOWN ---------- */
-async function statDrill(filterType, filterValue, titleText, scopeOffice){
+async function statDrill(filterType, filterValue, titleText, scopeOffice, scopeUserId){
   document.getElementById('statDrillTitle').textContent = titleText;
   document.getElementById('statDrillList').innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-light)">Loading\u2026</div>';
   show('statDrillModal');
@@ -4386,8 +4387,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
 
     if(filterType === 'status'){
       let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').eq('status', filterValue);
-      if(scopeOffice) q = q.eq('office', scopeOffice);
-      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      if(scopeUserId) q = q.eq('user_id', scopeUserId);
+      else if(scopeOffice) q = q.eq('office', scopeOffice);
+      else if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
       const { data: cRows } = await q.order('id');
       rows = (cRows||[]).map(c=>{
         const stepLabel = c.status==='open'
@@ -4398,8 +4400,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
 
     } else if(filterType === 'path_c_complete'){
       let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').eq('status','open');
-      if(scopeOffice) q = q.eq('office', scopeOffice);
-      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      if(scopeUserId) q = q.eq('user_id', scopeUserId);
+      else if(scopeOffice) q = q.eq('office', scopeOffice);
+      else if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
       const { data: cRows } = await q.order('id');
       rows = (cRows||[])
         .filter(c => (c.path_c_step||0) >= PATH_C.length)
@@ -4407,8 +4410,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
 
     } else if(filterType === 'caseload'){
       let q = sb.from('cases').select('id,status,step,user_id,office,tier,path_c_step').in('status',['outreach','intake','open']);
-      if(scopeOffice) q = q.eq('office', scopeOffice);
-      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      if(scopeUserId) q = q.eq('user_id', scopeUserId);
+      else if(scopeOffice) q = q.eq('office', scopeOffice);
+      else if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
       const { data: cRows } = await q.order('status').order('id');
       rows = (cRows||[]).map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:c.tier, detail:'' }));
 
@@ -4419,7 +4423,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
       // logged the contact (office roster / supervisor team), same author-based
       // rule the card counts above now use, not the case's current office/owner.
       let authorIds = null;
-      if(scopeOffice || supervisorTeamIds){
+      if(scopeUserId){
+        authorIds = [scopeUserId];
+      } else if(scopeOffice || supervisorTeamIds){
         if(supervisorTeamIds){
           authorIds = supervisorTeamIds;
         } else {
@@ -4427,7 +4433,6 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
           if(ouErr) throw ouErr;
           authorIds = (officeUsers||[]).map(u=>u.id);
         }
-        if(authorIds.length === 0){ rows = []; }
       }
       if(authorIds && authorIds.length === 0){
         rows = [];
@@ -4455,8 +4460,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
       let q = sb.from('cases').select('id,status,closed,opened_at,user_id,office').in('status',['closed','completed','declined']);
       if(start) q = q.gte('closed', start);
       if(end)   q = q.lte('closed', end);
-      if(scopeOffice) q = q.eq('office', scopeOffice);
-      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      if(scopeUserId) q = q.eq('user_id', scopeUserId);
+      else if(scopeOffice) q = q.eq('office', scopeOffice);
+      else if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
       const { data: cRows } = await q;
       rows = (cRows||[])
         .filter(c => filterType==='closed_before' ? !c.opened_at : !!c.opened_at)
@@ -4464,8 +4470,9 @@ async function statDrill(filterType, filterValue, titleText, scopeOffice){
 
     } else if(filterType === 'closed_all'){
       let q = sb.from('cases').select('id,status,closed,user_id,office').in('status',['closed','completed','declined']);
-      if(scopeOffice) q = q.eq('office', scopeOffice);
-      if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
+      if(scopeUserId) q = q.eq('user_id', scopeUserId);
+      else if(scopeOffice) q = q.eq('office', scopeOffice);
+      else if(supervisorTeamIds) q = q.in('user_id', supervisorTeamIds);
       const { data: cRows } = await q.order('closed',{ascending:false});
       rows = (cRows||[]).map(c=>({ id:c.id, cmName:cmNameById[c.user_id]||'', office:c.office, status:c.status, tier:null, detail:'Closed '+(c.closed||'') }));
     }
