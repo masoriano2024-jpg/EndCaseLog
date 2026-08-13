@@ -2176,7 +2176,7 @@ function lastNDays(n){
 function logIsClient(l, clientIdsFallback){
   if(l.stage_at_log){ return l.stage_at_log==='open' || l.stage_at_log==='completed'; }
   if(l.stage){ return l.stage==='open' || l.stage==='completed'; }
-  return clientIdsFallback.has(l.id);
+  return clientIdsFallback.has(l.case_id);
 }
 
 async function loadTeamView(){
