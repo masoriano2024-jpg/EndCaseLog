@@ -801,8 +801,6 @@
     <h3>Start New Case</h3>
     <label>Survivor ID (number)</label>
     <input type="number" id="newId" placeholder="e.g. 1042">
-    <label>Name / note (optional — kept private to you)</label>
-    <input type="text" id="newName" placeholder="optional reference">
     <label>Date assigned</label>
     <input type="date" id="newDate">
     <div class="modal-actions">
@@ -1466,9 +1464,6 @@ async function runImport(){
         user_id: row.user_id, office: row.office
       }, { onConflict:'id' });
       if(error) throw error;
-      if(row.name){
-        await sb.from('roster').upsert({ case_id: row.id, name: row.name }, { onConflict:'case_id' });
-      }
       success++;
     }catch(e){
       failed.push(`#${row.id}: ${e.message}`);
@@ -2949,8 +2944,7 @@ function renderReadOnlyCard(c){
     const tagCls = c.status==='declined' ? 'declined' : 'closed';
     return `<div class="case-card" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer;opacity:.85;border-left-color:var(--gray-light)">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag ${tagCls}">${statusLabel(c.status)}</span></span>
-          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <div><span class="case-id">#${c.id}<span class="tag ${tagCls}">${statusLabel(c.status)}</span></span></div>
         <span class="due-chip" style="background:#e8edf2;color:var(--gray)">${c.closed?'Closed '+fmt(c.closed):'Closed'}</span>
       </div>
     </div>`;
@@ -2964,7 +2958,6 @@ function renderReadOnlyCard(c){
       <div class="case-head">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span class="case-id">#${c.id}<span class="tag open">Open</span></span>
-          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
           ${tierBadge(c.tier)}
         </div>
         <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
@@ -2983,8 +2976,7 @@ function renderReadOnlyCard(c){
     const total=steps.length;
     return `<div class="case-card intake" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span>
-          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span></div>
         <span class="due-chip green">In progress</span>
       </div>
       ${flagBadge(c)}
@@ -3007,8 +2999,7 @@ function renderReadOnlyCard(c){
   const steps=stepsFor(c);const total=steps.length;
   return `<div class="case-card ${cls}" onclick="openTeamClientProfile(${c.id})" style="cursor:pointer">
     <div class="case-head">
-      <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span>
-        ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+      <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span></div>
       <span class="due-chip ${chip}">${chiptxt}</span>
     </div>
     ${flagBadge(c)}
@@ -3097,7 +3088,6 @@ async function openTeamClientProfile(id){
   const c = teamDrillUserCases.find(x=>x.id===id);
   const clientLogs = [...logs.filter(l=>l.id===id)].sort((a,b)=>b.date.localeCompare(a.date));
   const auditList = await auditLoadFromSupabase(id) || [];
-  const name = roster[id] || null;
 
   let caseHtml='';
   if(c){
@@ -3160,7 +3150,6 @@ async function openTeamClientProfile(id){
       <div style="background:var(--navy);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
         <div>
           <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
-          ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
         ${isAdmin()?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, teamAfterDelete)">🗑 Delete Case</button>`:''}
       </div>
@@ -3714,12 +3703,6 @@ async function load(){
       result:r.result, notes:r.notes, stage:r.stage_at_log, _dbId:r.id
     }));
 
-    // roster
-    const {data:rData,error:rErr}=await sb.from('roster').select('*');
-    if(rErr) throw rErr;
-    roster={};
-    (rData||[]).forEach(r=>{ roster[r.case_id]=r.name; });
-
     // step templates
     const {data:tData,error:tErr}=await sb.from('step_templates').select('*').order('position');
     if(tErr) throw tErr;
@@ -3759,11 +3742,6 @@ async function saveCase(c){
       closed_from_status: c.closedFromStatus||null
     },{onConflict:'id'});
     if(error) throw error;
-    // roster name
-    if(roster[c.id]){
-      const {error:re}=await sb.from('roster').upsert({case_id:c.id,name:roster[c.id]},{onConflict:'case_id'});
-      if(re) throw re;
-    }
     cacheWrite();
     syncDone();
   }catch(e){ syncErr('Save failed'); cacheWrite(); }
@@ -3900,18 +3878,6 @@ async function saveTemplates(){
     if(insErr) throw insErr;
     syncDone();
   }catch(e){ syncErr('Template save failed'); }
-}
-
-// ---- SAVE roster name ----
-async function saveRosterName(id,name){
-  try{
-    if(name){
-      await sb.from('roster').upsert({case_id:id,name},{onConflict:'case_id'});
-    } else {
-      await sb.from('roster').delete().eq('case_id',id);
-    }
-    cacheWrite();
-  }catch(e){ console.error('roster save failed',e); cacheWrite(); }
 }
 
 // ---- AUDIT save to Supabase ----
@@ -4249,7 +4215,6 @@ function renderDash(){
         <div class="case-head">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span class="case-id">#${c.id}<span class="tag open">Open</span></span>
-            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}
             ${tierBadge(c.tier)}
           </div>
           <span class="due-chip green">Opened ${fmt(c.openedAt||c.intakeStart||c.started)}</span>
@@ -4261,8 +4226,7 @@ function renderDash(){
     if(c.status==='intake'){
       return `<div class="case-card intake">
         <div class="case-head">
-          <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span>
-            ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+          <div><span class="case-id">#${c.id}<span class="tag intake">Pending</span></span></div>
           <span class="due-chip green">In progress</span>
         </div>
         ${flagBadge(c)}
@@ -4279,8 +4243,7 @@ function renderDash(){
     else{chiptxt='Due '+fmt(dd)+` (${du}d)`;}
     return `<div class="case-card ${cls}">
       <div class="case-head">
-        <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span>
-          ${roster[c.id]?`<span class="mini"> · ${esc(roster[c.id])}</span>`:''}</div>
+        <div><span class="case-id">#${c.id}<span class="tag outreach">Pre-Opened</span></span></div>
         <span class="due-chip ${chip}">${chiptxt}</span>
       </div>
       ${flagBadge(c)}
@@ -4298,13 +4261,12 @@ function statusLabel(status){
 }
 
 /* ---------- CASE ACTIONS ---------- */
-function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';document.getElementById('newName').value='';show('startModal')}
+function openStart(){document.getElementById('newDate').value=todayISO();document.getElementById('newId').value='';show('startModal')}
 async function startCase(){
   const id=parseInt(document.getElementById('newId').value);
   if(!id){alert('Enter a numerical ID.');return;}
   // Local guard: an active case with this ID that this user can already see.
   if(cases.find(c=>c.id===id&&(c.status==='outreach'||c.status==='intake'))){alert('That ID already has an active case.');return;}
-  const name=document.getElementById('newName').value.trim();
   const newCase={id,assigned:document.getElementById('newDate').value||todayISO(),status:'outreach',step:0,started:todayISO()};
   // Create with INSERT (not upsert): a brand-new case must never overwrite an
   // existing row. This also makes a colliding Client ID surface as a real
@@ -4327,10 +4289,6 @@ async function startCase(){
     }
     syncErr('Save failed');
     return;   // leave the modal open so the ID can be corrected; nothing added locally
-  }
-  if(name){
-    roster[id]=name;
-    await sb.from('roster').upsert({case_id:id,name},{onConflict:'case_id'});
   }
   cases.push(newCase);
   cacheWrite();
@@ -4536,7 +4494,7 @@ function closeCase(id,status){
   c.closedFromStatus=c.status;c.status=status;c.closed=todayISO();saveCase(c);renderAll();
 }
 function deleteClient(id){
-  if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), case notes, client to-dos, audit entries, and the name from the roster. This cannot be undone.`))return;
+  if(!confirm(`Permanently DELETE survivor #${id}? This removes the case, all ${logs.filter(l=>l.id===id).length} contact log(s), case notes, client to-dos, and audit entries. This cannot be undone.`))return;
   cases=cases.filter(c=>c.id!==id);
   logs=logs.filter(l=>l.id!==id);
   delete roster[id];
@@ -4588,10 +4546,7 @@ let activeRosterId = null;
 function renderRoster(){
   const el=document.getElementById('rosterList');
   const statusPriority={open:0,intake:1,outreach:2,completed:3,closed:4,declined:5};
-  // Roster tab is the personal client list — only names tied to MY cases, not every
-  // roster row visible via RLS (that broader view lives in the Team tab now).
-  const myCaseIds=new Set(cases.map(c=>c.id));
-  const ids=[...new Set([...cases.map(c=>c.id),...Object.keys(roster).map(Number).filter(id=>myCaseIds.has(id))])]
+  const ids=[...new Set(cases.map(c=>c.id))]
     .sort((a,b)=>{
       const ca=cases.find(x=>x.id===a);
       const cb=cases.find(x=>x.id===b);
@@ -4614,7 +4569,7 @@ function renderRoster(){
         <span style="font-family:'Poppins',sans-serif;font-weight:700;color:var(--navy)">#${id}</span>
         <span style="font-size:11px;font-weight:600;color:${statusColor};text-transform:uppercase;letter-spacing:.3px">${statusLabel(st)}</span>
       </div>
-      <div class="mini">${roster[id]?esc(roster[id]):'<i>no name stored</i>'} · ${cnt} log${cnt!==1?'s':''}</div>
+      <div class="mini">${cnt} log${cnt!==1?'s':''}</div>
     </div>`;
   }).join('');
   if(transferredCases.length){
@@ -4637,13 +4592,8 @@ function transferredRosterRow(c){
       <span style="font-family:'Poppins',sans-serif;font-weight:700;color:var(--navy)">#${c.id}</span>
       <span style="font-size:11px;font-weight:600;color:var(--gray-light);text-transform:uppercase;letter-spacing:.3px">${statusLabel(c.status)}</span>
     </div>
-    <div class="mini">${roster[c.id]?esc(roster[c.id]):'<i>no name stored</i>'} · <span class="transferred-badge">Transferred to ${esc(name)} · ${fmt((c.transferredAt||'').slice(0,10))}</span></div>
+    <div class="mini"><span class="transferred-badge">Transferred to ${esc(name)} · ${fmt((c.transferredAt||'').slice(0,10))}</span></div>
   </div>`;
-}
-
-function setName(id,v){
-  if(v.trim()) roster[id]=v.trim(); else delete roster[id];
-  saveRosterName(id, v.trim()||null);
 }
 
 // After an admin deletes a case from the Roster tab: drop it from the in-memory
@@ -4753,7 +4703,6 @@ async function openClientProfile(id, silent=false){
   const c=cases.find(x=>x.id===id);
   const clientLogs=[...logs.filter(l=>l.id===id)].sort((a,b)=>b.date.localeCompare(a.date));
   const auditList=auditLoadList(id);
-  const name=roster[id]||null;
 
   // case info section
   let caseHtml='';
@@ -4821,10 +4770,8 @@ async function openClientProfile(id, silent=false){
       <div style="background:var(--navy);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
         <div>
           <div style="font-family:'Poppins',sans-serif;font-weight:800;font-size:18px;color:var(--white)">Client #${id}</div>
-          ${name?`<div style="font-size:12px;color:#7bb8e8;margin-top:2px">${esc(name)}</div>`:''}
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          ${readOnly?'':`<input style="font-size:13px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:var(--white);border-radius:5px;padding:5px 10px;width:160px" placeholder="Add/edit name…" value="${esc(name||'')}" onchange="setName(${id},this.value);renderRoster()">`}
           ${(isAdmin() && !readOnly)?`<button class="btn sm" style="background:var(--red);color:#fff;border-color:var(--red)" onclick="adminDeleteCaseWithConfirm(${id}, rosterAfterDelete)">🗑 Delete Case</button>`:''}
           <button class="btn sm ghost" style="color:var(--white);border-color:rgba(255,255,255,.3)" onclick="activeRosterId=null;document.getElementById('clientProfile').style.display='none';renderRoster()">✕ Close</button>
         </div>
