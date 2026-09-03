@@ -202,7 +202,7 @@
     <p>When a new survivor comes to you, give them a case. On the Dashboard, click the blue <strong>+ Start New Case</strong> button.</p>
     <ol class="steps">
       <li>Enter the <strong>Survivor ID</strong> — this is the <strong>number that TCR generates</strong> for the survivor, not their name.</li>
-      <li>Optionally add a private <strong>name or note</strong> to help you remember who's who. This stays private to you.</li>
+      <li>Optionally add initials<strong>name or note</strong> to help you remember who's who. This stays private to you.</li>
       <li>Confirm the <strong>date assigned</strong>, then click <strong>Begin Timeline</strong>.</li>
     </ol>
     <figure>
